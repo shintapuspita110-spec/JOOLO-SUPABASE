@@ -1,5 +1,10 @@
 {
   "/_global-error/page": "/_global-error",
   "/_not-found/page": "/_not-found",
-  "/page": "/"
+  "/admin/page": "/admin",
+  "/auth/callback/route": "/auth/callback",
+  "/dashboard/page": "/dashboard",
+  "/login/page": "/login",
+  "/page": "/",
+  "/signup/page": "/signup"
 }

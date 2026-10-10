@@ -105,7 +105,7 @@
         "transform": "lodash/{{member}}"
       }
     },
-    "outputFileTracingRoot": "/Users/macbook/Desktop/Belajar-IT/JOOLO-APPS",
+    "outputFileTracingRoot": "/Users/macbook/Desktop/Belajar-IT/JOOLOAPPS_SUPABASE",
     "enablePrerenderSourceMaps": true,
     "cacheComponents": false,
     "cacheLife": {
@@ -321,13 +321,13 @@
     "htmlLimitedBots": "[\\w-]+-Google|Google-[\\w-]+|Chrome-Lighthouse|Slurp|DuckDuckBot|baiduspider|yandex|sogou|bitlybot|tumblr|vkShare|quora link preview|redditbot|ia_archiver|Bingbot|BingPreview|applebot|facebookexternalhit|facebookcatalog|Twitterbot|LinkedInBot|Slackbot|Discordbot|WhatsApp|SkypeUriPreview|Yeti|googleweblight",
     "bundlePagesRouterDependencies": false,
     "configFileName": "next.config.js",
-    "repoRoot": "/Users/macbook/Desktop/Belajar-IT/JOOLO-APPS",
+    "repoRoot": "/Users/macbook/Desktop/Belajar-IT/JOOLOAPPS_SUPABASE",
     "turbopack": {
-      "root": "/Users/macbook/Desktop/Belajar-IT/JOOLO-APPS"
+      "root": "/Users/macbook/Desktop/Belajar-IT/JOOLOAPPS_SUPABASE"
     },
     "distDirRoot": ".next"
   },
-  "appDir": "/Users/macbook/Desktop/Belajar-IT/JOOLO-APPS",
+  "appDir": "/Users/macbook/Desktop/Belajar-IT/JOOLOAPPS_SUPABASE",
   "relativeAppDir": "",
   "files": [
     ".next/package.json",
