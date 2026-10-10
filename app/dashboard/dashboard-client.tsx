@@ -6,7 +6,8 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { strToU8, zipSync } from "fflate";
 import { createClient } from "@/lib/supabase/client";
 import type { BonusType, UploadedBonusResource } from "@/lib/bonus";
-import type { PhaseDailyQuest } from "@/lib/phase-quests";
+import type { PhaseDailyQuest, PhaseQuestProgress } from "@/lib/phase-quests";
+import type { UserDailyQuest } from "@/lib/user-daily-quests";
 
 type Gender = "woman" | "man";
 type LeaderboardPeriod = "daily" | "weekly" | "phase";
@@ -25,13 +26,32 @@ type Challenge = {
   image: string;
   done: boolean;
   custom?: boolean;
-  schedule?: "daily" | "weekly";
+  schedule?: "one-time" | "daily" | "weekly";
   frequency?: number;
   level?: "Easy" | "Medium" | "Hard";
   targetAmount?: number;
   targetUnit?: string;
   phaseFocus?: string;
+  phaseGoal?: number;
+  phaseTarget?: string;
+  dayNumber?: number;
+  startDay?: number;
+  endDay?: number;
+  description?: string;
 };
+
+function getPhaseQuestGoal(target: string) {
+  const amounts = Array.from(target.matchAll(/\d+(?:[.,]\d+)?/g), ([amount]) => Number(amount.replace(",", ".")));
+  return target.toLocaleLowerCase().startsWith("skala") ? amounts.at(-1) : amounts[0];
+}
+
+function formatProgressAmount(amount: number) {
+  return amount.toLocaleString("en-US", { maximumFractionDigits: 2 });
+}
+
+function getUserDailyQuestReward(quest: Pick<UserDailyQuest, "level" | "target_amount">) {
+  return quest.level === "Easy" ? 10 : quest.level === "Medium" ? 20 : 30;
+}
 
 const challengeImages: Record<Gender, { run: string; read: string }> = {
   woman: {
@@ -186,7 +206,8 @@ export default function DashboardClient({
   uploadedResources,
   initialStartDate,
   phaseDailyQuests,
-  completedPhaseQuestIds: initialCompletedPhaseQuestIds,
+  phaseQuestProgress: initialPhaseQuestProgress,
+  userDailyQuests: initialUserDailyQuests,
 }: {
   userId: string;
   email: string;
@@ -195,7 +216,8 @@ export default function DashboardClient({
   uploadedResources: UploadedBonusResource[];
   initialStartDate: string;
   phaseDailyQuests: PhaseDailyQuest[];
-  completedPhaseQuestIds: string[];
+  phaseQuestProgress: PhaseQuestProgress[];
+  userDailyQuests: UserDailyQuest[];
 }) {
   const router = useRouter();
   const [gender, setGender] = useState<Gender>("woman");
@@ -208,20 +230,36 @@ export default function DashboardClient({
   const [journeyDatePickerOpen, setJourneyDatePickerOpen] = useState(false);
   const [journeyDateSaving, setJourneyDateSaving] = useState(false);
   const [journeyDateError, setJourneyDateError] = useState("");
-  const [completedPhaseQuestIds, setCompletedPhaseQuestIds] = useState(initialCompletedPhaseQuestIds);
+  const [phaseQuestProgressById, setPhaseQuestProgressById] = useState<Record<string, PhaseQuestProgress>>(
+    () => Object.fromEntries(initialPhaseQuestProgress.map((progress) => [progress.quest_id, progress])),
+  );
+  const [completedPhaseQuestIds, setCompletedPhaseQuestIds] = useState(
+    () => initialPhaseQuestProgress.filter((progress) => progress.completed_at !== null).map((progress) => progress.quest_id),
+  );
+  const [phaseProgressDrafts, setPhaseProgressDrafts] = useState<Record<string, string>>({});
   const [pendingPhaseQuestIds, setPendingPhaseQuestIds] = useState<string[]>([]);
+  const [userDailyQuests, setUserDailyQuests] = useState(initialUserDailyQuests);
+  const [pendingUserDailyQuestIds, setPendingUserDailyQuestIds] = useState<string[]>([]);
+  const [userQuestProgressDrafts, setUserQuestProgressDrafts] = useState<Record<string, string>>({});
   const [coins, setCoins] = useState(267);
   const [modalOpen, setModalOpen] = useState(false);
-  const [taskSchedule, setTaskSchedule] = useState<"daily" | "weekly" | "2x" | "3x">("daily");
+  const [taskSaving, setTaskSaving] = useState(false);
+  const [taskSchedule, setTaskSchedule] = useState<"one-time" | "daily" | "weekly">("one-time");
   const [taskLevel, setTaskLevel] = useState<"Easy" | "Medium" | "Hard">("Easy");
   const [taskName, setTaskName] = useState("");
+  const [taskDescription, setTaskDescription] = useState("");
+  const [taskStartDay, setTaskStartDay] = useState(1);
+  const [taskEndDay, setTaskEndDay] = useState(1);
   const [taskTargetAmount, setTaskTargetAmount] = useState("");
   const [taskUnit, setTaskUnit] = useState("pages");
   const [customTaskUnit, setCustomTaskUnit] = useState("");
   const [progressChallengeId, setProgressChallengeId] = useState<string | null>(null);
   const [progressTitle, setProgressTitle] = useState("");
-  const [progressSchedule, setProgressSchedule] = useState<"daily" | "weekly" | "2x" | "3x">("daily");
+  const [progressDescription, setProgressDescription] = useState("");
+  const [progressSchedule, setProgressSchedule] = useState<"one-time" | "daily" | "weekly">("one-time");
   const [progressLevel, setProgressLevel] = useState<"Easy" | "Medium" | "Hard">("Easy");
+  const [progressStartDay, setProgressStartDay] = useState(1);
+  const [progressEndDay, setProgressEndDay] = useState(1);
   const [progressTarget, setProgressTarget] = useState("");
   const [progressUnit, setProgressUnit] = useState("pages");
   const [progressCustomUnit, setProgressCustomUnit] = useState("");
@@ -270,22 +308,60 @@ export default function DashboardClient({
 
   const phaseQuestsForSelectedDay = phaseDailyQuests
     .filter((quest) => quest.day_number === selectedDay)
-    .map<Challenge>((quest) => ({
-      id: quest.id,
-      title: quest.task_name,
-      subtitle: quest.short_description,
-      detail: `${quest.frequency} · ${quest.level} · 0 / ${quest.target}`,
-      reward: quest.total_coin,
-      accent: quest.level === "Easy" ? "cyan" : quest.level === "Medium" ? "pink" : "gold",
-      image: "",
-      done: completedPhaseQuestIds.includes(quest.id),
-      level: quest.level,
-      phaseFocus: quest.focus,
-    }));
+    .map<Challenge>((quest) => {
+      const progress = phaseQuestProgressById[quest.id];
+      const achievedAmount = progress?.achieved_amount ?? 0;
+      return {
+        id: quest.id,
+        title: quest.task_name,
+        subtitle: quest.short_description,
+        detail: `${quest.frequency} · ${quest.level} · ${formatProgressAmount(achievedAmount)} / ${quest.target}`,
+        reward: quest.total_coin,
+        accent: quest.level === "Easy" ? "cyan" : quest.level === "Medium" ? "pink" : "gold",
+        image: "",
+        done: completedPhaseQuestIds.includes(quest.id),
+        level: quest.level,
+        phaseFocus: quest.focus,
+        phaseGoal: getPhaseQuestGoal(quest.target),
+        phaseTarget: quest.target,
+      };
+    });
+  const userQuestsForSelectedDay = userDailyQuests
+    .filter((quest) => quest.start_date <= selectedDay && quest.end_date >= selectedDay)
+    .map<Challenge>((quest) => {
+      const targetDetail = quest.target_amount === null
+        ? "Target open"
+        : `${formatProgressAmount(quest.achieved_amount)} / ${formatProgressAmount(quest.target_amount)} ${quest.target_unit}`;
+      const schedule = quest.frequency === "Daily"
+        ? "daily"
+        : quest.frequency === "Weekly"
+          ? "weekly"
+          : "one-time";
+      const detail = `${schedule} · ${quest.level} · ${targetDetail}`;
+      return {
+        id: quest.id,
+        title: quest.task_name,
+        subtitle: quest.short_description || detail,
+        detail,
+        reward: getUserDailyQuestReward(quest),
+        accent: quest.level === "Easy" ? "cyan" : quest.level === "Medium" ? "pink" : "gold",
+        image: getTaskCover(quest.task_name, gender),
+        done: quest.is_completed,
+        custom: true,
+        schedule,
+        level: quest.level,
+        targetAmount: quest.target_amount ?? undefined,
+        targetUnit: quest.target_unit ?? undefined,
+        dayNumber: quest.start_date,
+        startDay: quest.start_date,
+        endDay: quest.end_date,
+        description: quest.short_description,
+      };
+    });
   const selectedPhase = phaseDailyQuests.find((quest) => quest.day_number === selectedDay);
   const activeChallenges = phaseQuestsForSelectedDay.length > 0
-    ? [...phaseQuestsForSelectedDay, ...challenges.filter((challenge) => challenge.custom)]
-    : challenges;
+    ? [...phaseQuestsForSelectedDay, ...userQuestsForSelectedDay, ...challenges.filter((challenge) => challenge.custom && (!challenge.dayNumber || challenge.dayNumber === selectedDay))]
+    : [...challenges.filter((challenge) => !challenge.custom), ...userQuestsForSelectedDay, ...challenges.filter((challenge) => challenge.custom && (!challenge.dayNumber || challenge.dayNumber === selectedDay))];
   const completed = activeChallenges.filter((challenge) => challenge.done).length;
   const journeyStartDateLabel = new Date(`${journeyStartDate}T12:00:00`).toLocaleDateString("en-GB", {
     day: "2-digit",
@@ -293,8 +369,13 @@ export default function DashboardClient({
     year: "numeric",
   });
   const dayNumber = Math.max(selectedDay, 1);
-  const canClaimCertificate = dayNumber === 40 && challenges.length > 0 && completed === challenges.length;
-  const completedStardust = activeChallenges.reduce((total, challenge) => total + (challenge.done ? challenge.reward : 0), 0);
+  const canClaimCertificate = dayNumber === 40 && activeChallenges.length > 0 && completed === activeChallenges.length;
+  const completedStardust = activeChallenges.reduce((total, challenge) => {
+    if (!challenge.done) return total;
+    return total + (challenge.phaseFocus
+      ? phaseQuestProgressById[challenge.id]?.earned_coin ?? challenge.reward
+      : challenge.reward);
+  }, 0);
   const progress = Math.round((completed / Math.max(activeChallenges.length, 1)) * 100);
   const quote = useMemo(() => quotes[(dayNumber - 1) % quotes.length], [dayNumber]);
   const rankedLeaders = useMemo(
@@ -333,53 +414,236 @@ export default function DashboardClient({
     resource.type === bonusType
     && `${resource.title} ${resource.description}`.toLowerCase().includes(bonusSearch.trim().toLowerCase()),
   );
-  const levelMultiplier = taskLevel === "Easy" ? 1 : taskLevel === "Medium" ? 2 : 3;
-  const enteredTarget = Number(taskTargetAmount);
-  const taskReward = taskTargetAmount.trim() && Number.isFinite(enteredTarget) && enteredTarget > 0
-    ? enteredTarget * levelMultiplier
-    : levelMultiplier * 10;
+  const taskReward = taskLevel === "Easy" ? 10 : taskLevel === "Medium" ? 20 : 30;
 
   function notify(message: string) {
     setToast(message);
     window.setTimeout(() => setToast(""), 2600);
   }
 
+  async function persistPhaseQuestProgress(id: string, isCompleted: boolean, achievedAmount: number | null) {
+    if (pendingPhaseQuestIds.includes(id)) return;
+    const quest = phaseDailyQuests.find((item) => item.id === id);
+    if (!quest) {
+      notify("Quest progress could not be saved: daily quest was not found.");
+      return;
+    }
+
+    setPendingPhaseQuestIds((ids) => [...ids, id]);
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase.rpc("save_phase_quest_progress", {
+        p_quest_id: id,
+        p_achieved_amount: achievedAmount,
+        p_is_completed: isCompleted,
+      });
+
+      if (error) {
+        notify(`Quest progress could not be saved: ${error.message}`);
+        return;
+      }
+
+      const savedProgress = Array.isArray(data) ? data[0] : data;
+      const achievedAmountResult = Number(savedProgress?.achieved_amount);
+      const earnedCoinResult = Number(savedProgress?.earned_coin);
+      if (
+        !savedProgress
+        || savedProgress.quest_id !== id
+        || !Number.isFinite(achievedAmountResult)
+        || !Number.isInteger(earnedCoinResult)
+        || typeof savedProgress.progress_updated !== "boolean"
+        || (savedProgress.completed_at !== null && typeof savedProgress.completed_at !== "string")
+      ) {
+        notify("Quest progress could not be saved: Supabase returned an invalid progress record.");
+        return;
+      }
+      const normalizedProgress: PhaseQuestProgress = {
+        quest_id: savedProgress.quest_id,
+        achieved_amount: achievedAmountResult,
+        earned_coin: earnedCoinResult,
+        progress_updated: savedProgress.progress_updated,
+        completed_at: savedProgress.completed_at,
+      };
+
+      const previousEarnedCoin = phaseQuestProgressById[id]?.earned_coin ?? 0;
+      const coinDelta = normalizedProgress.earned_coin - previousEarnedCoin;
+      setPhaseQuestProgressById((progress) => ({ ...progress, [id]: normalizedProgress }));
+      setCompletedPhaseQuestIds((ids) => normalizedProgress.completed_at
+        ? ids.includes(id) ? ids : [...ids, id]
+        : ids.filter((questId) => questId !== id));
+      setCoins((value) => Math.max(0, value + coinDelta));
+      setDailyStardustByDay((days) => ({
+        ...days,
+        [quest.day_number]: Math.max(0, (days[String(quest.day_number)] ?? 0) + coinDelta),
+      }));
+      setChallengeCompletionDays((days) => {
+        if (normalizedProgress.completed_at) return { ...days, [id]: quest.day_number };
+        const nextDays = { ...days };
+        delete nextDays[id];
+        return nextDays;
+      });
+      setPhaseProgressDrafts((drafts) => {
+        const nextDrafts = { ...drafts };
+        delete nextDrafts[id];
+        return nextDrafts;
+      });
+      notify(normalizedProgress.completed_at
+        ? `Quest saved. You earned ${normalizedProgress.earned_coin} coins.`
+        : "Quest progress saved.");
+    } catch (error) {
+      notify(`Quest progress could not be saved: ${error instanceof Error ? error.message : "Unexpected error."}`);
+    } finally {
+      setPendingPhaseQuestIds((ids) => ids.filter((questId) => questId !== id));
+    }
+  }
+
+  function savePhaseQuestProgress(id: string) {
+    const draft = phaseProgressDrafts[id];
+    if (draft === undefined || draft.trim() === "") return;
+    const achievedAmount = Number(draft);
+    if (!Number.isFinite(achievedAmount) || achievedAmount < 0) {
+      notify("Enter a valid progress amount of zero or more.");
+      return;
+    }
+    persistPhaseQuestProgress(id, false, achievedAmount);
+  }
+
+  async function saveUserQuestProgress(id: string) {
+    const quest = userDailyQuests.find((item) => item.id === id);
+    const draft = userQuestProgressDrafts[id];
+    if (!quest || draft === undefined || draft.trim() === "") return;
+    const achievedAmount = Number(draft);
+    if (!Number.isFinite(achievedAmount) || achievedAmount < 0) {
+      notify("Enter a valid progress amount of zero or more.");
+      return;
+    }
+    if (pendingUserDailyQuestIds.includes(id)) return;
+
+    setPendingUserDailyQuestIds((ids) => [...ids, id]);
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("user_daily_quests")
+        .update({ achieved_amount: achievedAmount })
+        .eq("id", id)
+        .eq("user_id", userId)
+        .select("id, achieved_amount, is_completed, earned_coin")
+        .single();
+
+      if (error) {
+        notify(`Your quest progress could not be saved: ${error.message}`);
+        return;
+      }
+      if (!data || data.id !== id) {
+        notify("Your quest progress could not be saved: Supabase returned an invalid record.");
+        return;
+      }
+
+      const coinDelta = data.earned_coin - quest.earned_coin;
+      setUserDailyQuests((items) => items.map((item) => item.id === id
+        ? { ...item, achieved_amount: data.achieved_amount, is_completed: data.is_completed, earned_coin: data.earned_coin }
+        : item));
+      setCoins((value) => Math.max(0, value + coinDelta));
+      if (coinDelta !== 0) {
+        const earnedOnDay = challengeCompletionDays[id] ?? quest.start_date;
+        setDailyStardustByDay((days) => ({
+          ...days,
+          [earnedOnDay]: Math.max(0, (days[String(earnedOnDay)] ?? 0) + coinDelta),
+        }));
+      }
+      setUserQuestProgressDrafts((drafts) => {
+        const nextDrafts = { ...drafts };
+        delete nextDrafts[id];
+        return nextDrafts;
+      });
+      notify("Quest progress saved.");
+    } catch (error) {
+      notify(`Your quest progress could not be saved: ${error instanceof Error ? error.message : "Unexpected error."}`);
+    } finally {
+      setPendingUserDailyQuestIds((ids) => ids.filter((questId) => questId !== id));
+    }
+  }
+
   async function toggleChallenge(id: string) {
     const target = activeChallenges.find((item) => item.id === id);
     if (!target) return;
     const done = !target.done;
-    if (target.phaseFocus) {
-      if (pendingPhaseQuestIds.includes(id)) return;
-      setPendingPhaseQuestIds((ids) => [...ids, id]);
-      const supabase = createClient();
+    const userDailyQuest = userDailyQuests.find((quest) => quest.id === id);
+    if (userDailyQuest) {
+      if (pendingUserDailyQuestIds.includes(id)) return;
+      setPendingUserDailyQuestIds((ids) => [...ids, id]);
+      const draft = userQuestProgressDrafts[id];
+      const draftedAmount = draft === undefined || draft.trim() === "" ? null : Number(draft);
+      if (draftedAmount !== null && (!Number.isFinite(draftedAmount) || draftedAmount < 0)) {
+        setPendingUserDailyQuestIds((ids) => ids.filter((questId) => questId !== id));
+        notify("Enter a valid progress amount of zero or more.");
+        return;
+      }
+      const achievedAmount = done
+        ? draftedAmount ?? userDailyQuest.target_amount ?? userDailyQuest.achieved_amount
+        : draftedAmount ?? 0;
+      const earnedCoin = done
+        ? userDailyQuest.total_coin + (
+          userDailyQuest.target_amount !== null && achievedAmount >= userDailyQuest.target_amount ? 10 : 0
+        )
+        : 0;
       try {
-        const { error } = done
-          ? await supabase.from("user_phase_quest_progress").insert({ user_id: userId, quest_id: id })
-          : await supabase.from("user_phase_quest_progress").delete().eq("user_id", userId).eq("quest_id", id);
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from("user_daily_quests")
+          .update({ is_completed: done, achieved_amount: achievedAmount, earned_coin: earnedCoin })
+          .eq("id", id)
+          .eq("user_id", userId)
+          .select("id, is_completed, achieved_amount, earned_coin")
+          .single();
 
         if (error) {
-          notify(`Quest progress could not be saved: ${error.message}`);
+          notify(`Your custom quest could not be updated: ${error.message}`);
+          return;
+        }
+        if (!data || data.id !== id) {
+          notify("Your custom quest could not be updated: Supabase returned an invalid record.");
           return;
         }
 
-        setCompletedPhaseQuestIds((ids) => done ? [...ids, id] : ids.filter((questId) => questId !== id));
-        setCoins((value) => Math.max(0, value + (done ? target.reward : -target.reward)));
-        if (done) {
-          setChallengeCompletionDays((days) => ({ ...days, [id]: selectedDay }));
-          setDailyStardustByDay((days) => ({ ...days, [selectedDay]: (days[String(selectedDay)] ?? 0) + target.reward }));
-        } else {
-          setDailyStardustByDay((days) => ({ ...days, [selectedDay]: Math.max(0, (days[String(selectedDay)] ?? 0) - target.reward) }));
-          setChallengeCompletionDays((days) => {
-            const nextDays = { ...days };
-            delete nextDays[id];
-            return nextDays;
-          });
-        }
+        const coinDelta = data.earned_coin - userDailyQuest.earned_coin;
+        setUserDailyQuests((items) => items.map((item) => item.id === id
+          ? { ...item, is_completed: data.is_completed, achieved_amount: data.achieved_amount, earned_coin: data.earned_coin }
+          : item));
+        setUserQuestProgressDrafts((drafts) => {
+          const nextDrafts = { ...drafts };
+          delete nextDrafts[id];
+          return nextDrafts;
+        });
+        setCoins((value) => Math.max(0, value + coinDelta));
+        const earnedOnDay = done ? selectedDay : challengeCompletionDays[id] ?? selectedDay;
+        setDailyStardustByDay((days) => ({
+          ...days,
+          [earnedOnDay]: Math.max(0, (days[String(earnedOnDay)] ?? 0) + coinDelta),
+        }));
+        setChallengeCompletionDays((days) => {
+          if (data.is_completed) return { ...days, [id]: earnedOnDay };
+          const nextDays = { ...days };
+          delete nextDays[id];
+          return nextDays;
+        });
+        notify(done ? "Custom quest completed." : "Custom quest marked incomplete.");
       } catch (error) {
-        notify(`Quest progress could not be saved: ${error instanceof Error ? error.message : "Unexpected error."}`);
+        notify(`Your custom quest could not be updated: ${error instanceof Error ? error.message : "Unexpected error."}`);
       } finally {
-        setPendingPhaseQuestIds((ids) => ids.filter((questId) => questId !== id));
+        setPendingUserDailyQuestIds((ids) => ids.filter((questId) => questId !== id));
       }
+      return;
+    }
+
+    if (target.phaseFocus) {
+      const draft = phaseProgressDrafts[id];
+      const achievedAmount = draft === undefined || draft.trim() === "" ? null : Number(draft);
+      if (achievedAmount !== null && (!Number.isFinite(achievedAmount) || achievedAmount < 0)) {
+        notify("Enter a valid progress amount of zero or more.");
+        return;
+      }
+      await persistPhaseQuestProgress(id, done, achievedAmount);
       return;
     }
 
@@ -400,6 +664,7 @@ export default function DashboardClient({
   }
 
   function openProgressEditor(challenge: Challenge) {
+    const userDailyQuest = userDailyQuests.find((quest) => quest.id === challenge.id);
     const [scheduleText = ""] = challenge.detail.split(" · ");
     const schedule = scheduleText.toLowerCase();
     const frequency = challenge.frequency ?? Number(schedule.match(/^(\d+)\s*x/i)?.[1]);
@@ -407,9 +672,25 @@ export default function DashboardClient({
     const levelMatch = challenge.detail.match(/\b(Easy|Medium|Hard)\b/i)?.[1];
     const storedUnit = challenge.targetUnit ?? targetMatch?.[2].trim() ?? "pages";
     const knownUnits = ["pages", "km", "minutes", "reps", "glasses", "times"];
+    const questSchedule = userDailyQuest?.frequency === "Daily"
+      ? "daily"
+      : userDailyQuest?.frequency === "Weekly"
+        ? "weekly"
+        : userDailyQuest
+          ? "one-time"
+          : schedule === "daily"
+            ? "daily"
+            : schedule === "one-time"
+              ? "one-time"
+              : schedule === "2x/week" || frequency === 2 || schedule === "3x/week" || frequency === 3
+                ? "weekly"
+                : "one-time";
     setProgressChallengeId(challenge.id);
     setProgressTitle(challenge.title);
-    setProgressSchedule(schedule === "daily" || !/week/.test(schedule) && !frequency ? "daily" : schedule === "2x/week" || frequency === 2 ? "2x" : schedule === "3x/week" || frequency === 3 ? "3x" : "weekly");
+    setProgressDescription(challenge.description ?? "");
+    setProgressStartDay(userDailyQuest?.start_date ?? challenge.startDay ?? challenge.dayNumber ?? selectedDay);
+    setProgressEndDay(userDailyQuest?.end_date ?? challenge.endDay ?? challenge.dayNumber ?? selectedDay);
+    setProgressSchedule(questSchedule);
     setProgressLevel(challenge.level ?? (levelMatch === "Medium" || levelMatch === "Hard" ? levelMatch : "Easy"));
     setProgressTarget(String(challenge.targetAmount ?? targetMatch?.[1] ?? ""));
     setProgressUnit(knownUnits.includes(storedUnit) ? storedUnit : "custom");
@@ -417,38 +698,122 @@ export default function DashboardClient({
     setConfirmChallengeDelete(false);
   }
 
-  function updateChallenge(event: FormEvent<HTMLFormElement>) {
+  async function updateChallenge(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const challenge = challenges.find((item) => item.id === progressChallengeId);
-    if (!challenge) return;
+    const userDailyQuest = userDailyQuests.find((item) => item.id === progressChallengeId);
+    if (!challenge && !userDailyQuest) return;
     const data = new FormData(event.currentTarget);
-    const title = String(data.get("title") ?? "").trim();
-    const schedule = String(data.get("schedule") ?? "daily") as "daily" | "weekly" | "2x" | "3x";
-    const frequency = schedule === "2x" ? 2 : schedule === "3x" ? 3 : schedule === "weekly" ? 1 : undefined;
+    const title = String(data.get("task_name") ?? "").trim();
+    const description = String(data.get("short_description") ?? "").trim();
+    const startDay = Number(data.get("start_date") ?? progressStartDay);
+    const endDay = Number(data.get("end_date") ?? progressEndDay);
+    const schedule = String(data.get("frequency") ?? "one-time") as "one-time" | "daily" | "weekly";
     const rawTarget = String(data.get("target") ?? "").trim();
     const targetAmount = rawTarget ? Number(rawTarget) : null;
     const selectedUnit = String(data.get("unit") ?? "").trim();
     const targetUnit = selectedUnit === "custom" ? String(data.get("customUnit") ?? "").trim() : selectedUnit;
     const level = String(data.get("level") ?? "Easy") as "Easy" | "Medium" | "Hard";
     const multiplier = level === "Easy" ? 1 : level === "Medium" ? 2 : 3;
-    if (!title || (targetAmount !== null && (!Number.isFinite(targetAmount) || targetAmount <= 0 || !targetUnit))) {
+    if (
+      !title
+      || description.length > 300
+      || !Number.isInteger(startDay)
+      || !Number.isInteger(endDay)
+      || startDay < 1
+      || endDay > 40
+      || endDay < startDay
+      || (targetAmount !== null && (!Number.isFinite(targetAmount) || targetAmount <= 0 || !targetUnit))
+    ) {
       if (targetAmount !== null && selectedUnit === "custom" && !targetUnit) notify("Enter a custom target unit.");
       return;
     }
-    const reward = targetAmount === null ? multiplier * 10 : targetAmount * multiplier;
-    const scheduleDetail = schedule === "daily" ? "Daily" : schedule === "weekly" ? "Weekly" : `${frequency}x/Week`;
+    const reward = multiplier * 10;
+    const scheduleDetail = schedule;
     const unitLabel = targetUnit === "times" ? targetAmount === 1 ? "time" : "times" : targetUnit;
     const targetDetail = targetAmount === null ? "Target open" : `0 / ${targetAmount} ${unitLabel}`;
     const detail = `${scheduleDetail} · ${level} · ${targetDetail}`;
+    if (userDailyQuest) {
+      if (pendingUserDailyQuestIds.includes(userDailyQuest.id)) return;
+      setPendingUserDailyQuestIds((ids) => [...ids, userDailyQuest.id]);
+      const earnedCoin = userDailyQuest.is_completed ? reward : 0;
+      try {
+        const supabase = createClient();
+        const { data: updatedQuest, error } = await supabase
+          .from("user_daily_quests")
+          .update({
+            task_name: title,
+            short_description: description,
+            start_date: startDay,
+            end_date: endDay,
+            frequency: schedule === "one-time" ? "One-Time" : schedule === "daily" ? "Daily" : "Weekly",
+            level,
+            total_coin: reward,
+            target_amount: targetAmount,
+            target_unit: targetAmount === null ? null : targetUnit,
+            achieved_amount: userDailyQuest.is_completed ? targetAmount ?? userDailyQuest.achieved_amount : userDailyQuest.achieved_amount,
+            earned_coin: earnedCoin,
+          })
+          .eq("id", userDailyQuest.id)
+          .eq("user_id", userId)
+          .select("id, user_id, task_name, short_description, start_date, end_date, frequency, level, total_coin, target_amount, target_unit, achieved_amount, is_completed, earned_coin")
+          .single();
+
+        if (error) {
+          notify(`Your custom quest could not be updated: ${error.message}`);
+          return;
+        }
+        if (!updatedQuest) {
+          notify("Your custom quest could not be updated: Supabase returned no record.");
+          return;
+        }
+
+        const coinDelta = updatedQuest.earned_coin - userDailyQuest.earned_coin;
+        setUserDailyQuests((items) => items.map((item) => item.id === updatedQuest.id ? updatedQuest : item));
+        setCoins((value) => Math.max(0, value + coinDelta));
+        if (userDailyQuest.is_completed) {
+          setDailyStardustByDay((days) => {
+            const previousCompletionDay = challengeCompletionDays[userDailyQuest.id] ?? userDailyQuest.start_date;
+            const updatedCompletionDay = challengeCompletionDays[updatedQuest.id] ?? updatedQuest.start_date;
+            if (previousCompletionDay === updatedCompletionDay) {
+              return {
+                ...days,
+                [updatedCompletionDay]: Math.max(0, (days[String(updatedCompletionDay)] ?? 0) + coinDelta),
+              };
+            }
+            return {
+              ...days,
+              [previousCompletionDay]: Math.max(0, (days[String(previousCompletionDay)] ?? 0) - userDailyQuest.earned_coin),
+              [updatedCompletionDay]: Math.max(0, (days[String(updatedCompletionDay)] ?? 0) + updatedQuest.earned_coin),
+            };
+          });
+          if (!challengeCompletionDays[updatedQuest.id]) {
+            setChallengeCompletionDays((days) => ({ ...days, [updatedQuest.id]: updatedQuest.start_date }));
+          }
+        }
+        setProgressChallengeId(null);
+        notify("Custom quest updated.");
+      } catch (error) {
+        notify(`Your custom quest could not be updated: ${error instanceof Error ? error.message : "Unexpected error."}`);
+      } finally {
+        setPendingUserDailyQuestIds((ids) => ids.filter((id) => id !== userDailyQuest.id));
+      }
+      return;
+    }
+
+    if (!challenge) return;
     setChallenges((items) => items.map((item) => item.id === challenge.id ? {
       ...item,
       title,
-      subtitle: detail,
+      subtitle: description || detail,
+      description,
       detail,
       reward,
       image: getTaskCover(title, gender),
-      schedule: schedule === "daily" ? "daily" : "weekly",
-      frequency,
+      schedule,
+      dayNumber: startDay,
+      startDay,
+      endDay,
       level,
       targetAmount: targetAmount ?? undefined,
       targetUnit: targetAmount === null ? undefined : targetUnit,
@@ -462,8 +827,48 @@ export default function DashboardClient({
     notify("Challenge progress updated.");
   }
 
-  function deleteProgressChallenge() {
+  async function deleteProgressChallenge() {
     const challenge = challenges.find((item) => item.id === progressChallengeId);
+    const userDailyQuest = userDailyQuests.find((item) => item.id === progressChallengeId);
+    if (userDailyQuest) {
+      if (pendingUserDailyQuestIds.includes(userDailyQuest.id)) return;
+      setPendingUserDailyQuestIds((ids) => [...ids, userDailyQuest.id]);
+      try {
+        const supabase = createClient();
+        const { error } = await supabase
+          .from("user_daily_quests")
+          .delete()
+          .eq("id", userDailyQuest.id)
+          .eq("user_id", userId);
+
+        if (error) {
+          notify(`Your custom quest could not be deleted: ${error.message}`);
+          return;
+        }
+        setUserDailyQuests((items) => items.filter((item) => item.id !== userDailyQuest.id));
+        if (userDailyQuest.is_completed) {
+          setCoins((value) => Math.max(0, value - userDailyQuest.earned_coin));
+          const earnedOnDay = challengeCompletionDays[userDailyQuest.id] ?? userDailyQuest.start_date;
+          setDailyStardustByDay((days) => ({
+            ...days,
+            [earnedOnDay]: Math.max(0, (days[String(earnedOnDay)] ?? 0) - userDailyQuest.earned_coin),
+          }));
+          setChallengeCompletionDays((days) => {
+            const nextDays = { ...days };
+            delete nextDays[userDailyQuest.id];
+            return nextDays;
+          });
+        }
+        setProgressChallengeId(null);
+        setConfirmChallengeDelete(false);
+        notify("Custom quest removed.");
+      } catch (error) {
+        notify(`Your custom quest could not be deleted: ${error instanceof Error ? error.message : "Unexpected error."}`);
+      } finally {
+        setPendingUserDailyQuestIds((ids) => ids.filter((id) => id !== userDailyQuest.id));
+      }
+      return;
+    }
     if (!challenge) return;
     setChallenges((items) => items.filter((item) => item.id !== challenge.id));
     if (challenge.done) {
@@ -481,53 +886,82 @@ export default function DashboardClient({
     notify("Challenge removed.");
   }
 
-  function addChallenge(event: FormEvent<HTMLFormElement>) {
+  async function addChallenge(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
-    const title = String(data.get("title") ?? "").trim();
-    const schedule = String(data.get("schedule") ?? "daily") as "daily" | "weekly" | "2x" | "3x";
-    const frequency = schedule === "2x" ? 2 : schedule === "3x" ? 3 : schedule === "weekly" ? 1 : undefined;
+    const title = String(data.get("task_name") ?? "").trim();
+    const description = String(data.get("short_description") ?? "").trim();
+    const startDay = Number(data.get("start_date") ?? taskStartDay);
+    const endDay = Number(data.get("end_date") ?? taskEndDay);
+    const schedule = String(data.get("frequency") ?? "one-time") as "one-time" | "daily" | "weekly";
     const rawTarget = String(data.get("target") ?? "").trim();
     const targetAmount = rawTarget ? Number(rawTarget) : null;
     const selectedUnit = String(data.get("unit") ?? "").trim();
     const targetUnit = selectedUnit === "custom" ? String(data.get("customUnit") ?? "").trim() : selectedUnit;
     const level = String(data.get("level") ?? "Easy") as "Easy" | "Medium" | "Hard";
-    const rewardMultiplier = level === "Easy" ? 1 : level === "Medium" ? 2 : 3;
-    const reward = targetAmount === null ? rewardMultiplier * 10 : targetAmount * rewardMultiplier;
-    if (!title || (targetAmount !== null && (!Number.isFinite(targetAmount) || targetAmount <= 0 || !targetUnit))) {
+    if (
+      !title
+      || !description
+      || description.length > 300
+      || !Number.isInteger(startDay)
+      || !Number.isInteger(endDay)
+      || startDay < 1
+      || endDay > 40
+      || endDay < startDay
+      || (targetAmount !== null && (!Number.isFinite(targetAmount) || targetAmount <= 0 || !targetUnit))
+    ) {
       if (targetAmount !== null && selectedUnit === "custom" && !targetUnit) {
         notify("Enter a custom target unit.");
       }
       return;
     }
-    const scheduleDetail = schedule === "daily" ? "Daily" : schedule === "weekly" ? "Weekly" : `${frequency}x/Week`;
-    const unitLabel = targetUnit === "times" ? targetAmount === 1 ? "time" : "times" : targetUnit;
-    const targetDetail = targetAmount === null ? "Target open" : `0 / ${targetAmount} ${unitLabel}`;
-    setChallenges((items) => [...items, {
-      id: `custom-${Date.now()}`,
-      title,
-      subtitle: `${scheduleDetail} · ${level} · ${targetDetail}`,
-      detail: `${scheduleDetail} · ${level} · ${targetDetail}`,
-      reward,
-      accent: "gold",
-      image: getTaskCover(title, gender),
-      done: false,
-      custom: true,
-      schedule: schedule === "daily" ? "daily" : "weekly",
-      frequency,
-      level,
-      targetAmount: targetAmount ?? undefined,
-      targetUnit: targetAmount === null ? undefined : targetUnit,
-    }]);
-    setModalOpen(false);
-    event.currentTarget.reset();
-    setTaskName("");
-    setTaskSchedule("daily");
-    setTaskLevel("Easy");
-    setTaskTargetAmount("");
-    setTaskUnit("pages");
-    setCustomTaskUnit("");
-    notify("Challenge added to your journey!");
+    if (taskSaving) return;
+    setTaskSaving(true);
+    try {
+      const supabase = createClient();
+      const { data: createdQuest, error } = await supabase
+        .from("user_daily_quests")
+        .insert({
+          user_id: userId,
+          task_name: title,
+          short_description: description,
+          start_date: startDay,
+          end_date: endDay,
+          frequency: schedule === "one-time" ? "One-Time" : schedule === "daily" ? "Daily" : "Weekly",
+          level,
+          total_coin: taskReward,
+          target_amount: targetAmount,
+          target_unit: targetAmount === null ? null : targetUnit,
+        })
+        .select("id, user_id, task_name, short_description, start_date, end_date, frequency, level, total_coin, target_amount, target_unit, achieved_amount, is_completed, earned_coin")
+        .single();
+
+      if (error) {
+        notify(`Your quest could not be created: ${error.message}`);
+        return;
+      }
+      if (!createdQuest) {
+        notify("Your quest could not be created: Supabase returned no record.");
+        return;
+      }
+
+      setUserDailyQuests((quests) => [...quests, createdQuest]);
+      setModalOpen(false);
+      setTaskName("");
+      setTaskDescription("");
+      setTaskStartDay(selectedDay);
+      setTaskEndDay(selectedDay);
+      setTaskSchedule("one-time");
+      setTaskLevel("Easy");
+      setTaskTargetAmount("");
+      setTaskUnit("pages");
+      setCustomTaskUnit("");
+      notify(`Quest added for Day ${startDay}–${endDay}.`);
+    } catch (error) {
+      notify(`Your quest could not be created: ${error instanceof Error ? error.message : "Unexpected error."}`);
+    } finally {
+      setTaskSaving(false);
+    }
   }
 
   function selectGender(value: Gender) {
@@ -536,9 +970,12 @@ export default function DashboardClient({
   }
 
   function openTaskCreator() {
-    setTaskSchedule("daily");
+    setTaskSchedule("one-time");
     setTaskLevel("Easy");
     setTaskName("");
+    setTaskDescription("");
+    setTaskStartDay(selectedDay);
+    setTaskEndDay(selectedDay);
     setTaskTargetAmount("");
     setTaskUnit("pages");
     setCustomTaskUnit("");
@@ -547,9 +984,12 @@ export default function DashboardClient({
 
   function closeTaskCreator() {
     setModalOpen(false);
-    setTaskSchedule("daily");
+    setTaskSchedule("one-time");
     setTaskLevel("Easy");
     setTaskName("");
+    setTaskDescription("");
+    setTaskStartDay(selectedDay);
+    setTaskEndDay(selectedDay);
     setTaskTargetAmount("");
     setTaskUnit("pages");
     setCustomTaskUnit("");
@@ -818,12 +1258,77 @@ export default function DashboardClient({
             {activeChallenges.map((challenge, index) => {
               const image = challenge.custom || challenge.phaseFocus ? challenge.image : index < 2 ? challengeImages[gender][index === 0 ? "run" : "read"] : "";
               const coverImage = challenge.image || image;
-              return <article className={`challenge-card ${challenge.accent} ${challenge.done ? "is-done" : ""} ${challenge.custom ? "custom-card" : ""}`} key={challenge.id} style={coverImage ? { backgroundImage: `linear-gradient(90deg, rgba(8, 17, 31, .98) 0%, rgba(8, 17, 31, .91) 38%, rgba(8, 17, 31, .31) 100%), url("${coverImage}")` } : undefined}>
-                {!challenge.phaseFocus && <button className="challenge-cover-edit" type="button" onClick={() => openProgressEditor(challenge)} aria-label={`Edit progress for ${challenge.title}`} title="Edit quest progress" />}
+              const phaseProgress = phaseQuestProgressById[challenge.id];
+              const userQuest = userDailyQuests.find((quest) => quest.id === challenge.id);
+              const progressDraft = phaseProgressDrafts[challenge.id];
+              const userProgressDraft = userQuestProgressDrafts[challenge.id];
+              const hasProgressDraft = progressDraft !== undefined;
+              const draftedAmount = progressDraft === undefined ? 0 : Number(progressDraft);
+              const validProgressDraft = progressDraft !== undefined
+                && progressDraft.trim() !== ""
+                && Number.isFinite(draftedAmount)
+                && draftedAmount >= 0;
+              const displayedReward = challenge.phaseFocus
+                ? challenge.done
+                  ? phaseProgress?.earned_coin ?? challenge.reward
+                  : `${challenge.reward}-${challenge.reward + 10}`
+                : userQuest?.is_completed
+                  ? userQuest.earned_coin
+                  : challenge.reward;
+              return <article className={`challenge-card ${challenge.accent} ${challenge.done ? "is-done" : ""} ${challenge.custom ? "custom-card" : ""} ${challenge.phaseFocus ? "phase-quest-card" : ""}`} key={challenge.id} style={coverImage ? { backgroundImage: `linear-gradient(90deg, rgba(8, 17, 31, .98) 0%, rgba(8, 17, 31, .91) 38%, rgba(8, 17, 31, .31) 100%), url("${coverImage}")` } : undefined}>
+                {userQuest && <button className="user-quest-edit" type="button" onClick={() => openProgressEditor(challenge)} disabled={pendingUserDailyQuestIds.includes(userQuest.id)}><Icon name="sparkles" size={15} /> Edit quest</button>}
                 <div className="card-corner" />
-                <div className="reward-tag"><span>✦</span> {challenge.reward} <small>XP</small></div>
+                <div className="reward-tag"><span>✦</span> {displayedReward} <small>{challenge.phaseFocus ? "COIN" : "XP"}</small></div>
                 <div className="challenge-content"><span className="challenge-category">{challenge.phaseFocus ?? (challenge.custom ? "YOUR QUEST" : index === 0 ? "BODY · MOVEMENT" : index === 1 ? "MIND · LEARNING" : "SOUL · REFLECTION")}</span><h3>{challenge.title}</h3><p className="challenge-subtitle">{challenge.subtitle}</p><div className="challenge-detail"><span>{challenge.detail.split(" · ")[0]}</span><i /> <span>{challenge.detail.split(" · ")[1]}</span><i /> <span>{challenge.done ? "Complete ✓" : challenge.detail.split(" · ")[2]}</span></div></div>
-                <button className="complete-button" onClick={() => toggleChallenge(challenge.id)} disabled={pendingPhaseQuestIds.includes(challenge.id)} aria-label={`${challenge.done ? "Mark incomplete" : "Complete"} ${challenge.title}`} aria-pressed={challenge.done}><Icon name="check" size={22} /><span>{pendingPhaseQuestIds.includes(challenge.id) ? "Saving..." : challenge.done ? "Completed" : "Complete quest"}</span></button>
+                {challenge.phaseFocus && <div className="phase-progress-editor">
+                  <label htmlFor={`phase-progress-${challenge.id}`}>Your progress <span>{formatProgressAmount(validProgressDraft ? draftedAmount : phaseProgress?.achieved_amount ?? 0)} / {challenge.phaseTarget}</span></label>
+                  <div className="phase-progress-controls">
+                    <input
+                      id={`phase-progress-${challenge.id}`}
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={progressDraft ?? String(phaseProgress?.achieved_amount ?? 0)}
+                      onChange={(event) => {
+                        const value = event.currentTarget.value;
+                        setPhaseProgressDrafts((drafts) => ({ ...drafts, [challenge.id]: value }));
+                      }}
+                      disabled={pendingPhaseQuestIds.includes(challenge.id)}
+                      aria-label={`Progress amount for ${challenge.title}`}
+                    />
+                    <span>/ {challenge.phaseTarget}</span>
+                    <button
+                      type="button"
+                      onClick={() => savePhaseQuestProgress(challenge.id)}
+                      disabled={!hasProgressDraft || !validProgressDraft || pendingPhaseQuestIds.includes(challenge.id)}
+                    >
+                      Save progress
+                    </button>
+                  </div>
+                  <small>Save your achievement here, then complete the quest to receive coins. Reaching the target adds +10 bonus coins; completing without saved progress counts as reaching it.</small>
+                </div>}
+                {userQuest?.target_amount !== null && userQuest && <div className="phase-progress-editor">
+                  <label htmlFor={`user-quest-progress-${challenge.id}`}>Your progress <span>{formatProgressAmount(userQuestProgressDrafts[challenge.id] !== undefined && userQuestProgressDrafts[challenge.id].trim() !== "" ? Number(userQuestProgressDrafts[challenge.id]) : userQuest.achieved_amount)} / {formatProgressAmount(userQuest.target_amount)} {userQuest.target_unit}</span></label>
+                  <div className="phase-progress-controls">
+                    <input
+                      id={`user-quest-progress-${challenge.id}`}
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={userProgressDraft ?? String(userQuest.achieved_amount)}
+                      onChange={(event) => {
+                        const value = event.currentTarget.value;
+                        setUserQuestProgressDrafts((drafts) => ({ ...drafts, [challenge.id]: value }));
+                      }}
+                      disabled={pendingUserDailyQuestIds.includes(challenge.id)}
+                      aria-label={`Progress amount for ${challenge.title}`}
+                    />
+                    <span>/ {formatProgressAmount(userQuest.target_amount)} {userQuest.target_unit}</span>
+                    <button type="button" onClick={() => saveUserQuestProgress(challenge.id)} disabled={userProgressDraft === undefined || userProgressDraft.trim() === "" || pendingUserDailyQuestIds.includes(challenge.id)}>Save progress</button>
+                  </div>
+                  <small>Reach the target for +10 bonus coins when you complete this quest.</small>
+                </div>}
+                <button className="complete-button" onClick={() => toggleChallenge(challenge.id)} disabled={pendingPhaseQuestIds.includes(challenge.id) || pendingUserDailyQuestIds.includes(challenge.id)} aria-label={`${challenge.done ? "Mark incomplete" : "Complete"} ${challenge.title}`} aria-pressed={challenge.done}><Icon name="check" size={22} /><span>{pendingPhaseQuestIds.includes(challenge.id) || pendingUserDailyQuestIds.includes(challenge.id) ? "Saving..." : challenge.done ? "Completed" : "Complete quest"}</span></button>
                 <div className="card-progress"><span style={{ width: challenge.done ? "100%" : "18%" }} /></div>
               </article>;
             })}
@@ -859,33 +1364,46 @@ export default function DashboardClient({
           <header className="create-task-heading"><button className="create-task-back" type="button" onClick={closeTaskCreator} aria-label="Back to challenge"><Icon name="back" size={23} /></button><h2 id="create-task-title">Create Task</h2><span /></header>
           <form className="create-task-form" onSubmit={addChallenge}>
             <label className="task-field-label" htmlFor="challenge-title">Task name</label>
-            <input className="task-title-input" id="challenge-title" name="title" value={taskName} onChange={(event) => setTaskName(event.currentTarget.value)} placeholder="e.g. Run 5 km, read 10 pages..." maxLength={60} required autoFocus />
-            <div className="task-image-picker" role="img" aria-label={`Automatically selected cover for ${taskName || "your task"}`}>
-              <img src={getTaskCover(taskName, gender)} alt="" />
-              <span className="task-image-scrim" />
-              <span className="task-image-hint"><Icon name="sparkles" size={18} />Cover otomatis mengikuti nama task</span>
-              <span className="task-image-auto-badge">AUTO MATCH</span>
+            <input className="task-title-input" id="challenge-title" name="task_name" value={taskName} onChange={(event) => setTaskName(event.currentTarget.value)} placeholder="e.g. Run 5 km, read 10 pages..." maxLength={60} required autoFocus />
+            <label className="task-field-label" htmlFor="challenge-description">Short description</label>
+            <textarea className="task-title-input" id="challenge-description" name="short_description" value={taskDescription} onChange={(event) => setTaskDescription(event.currentTarget.value)} placeholder="What do you want to achieve?" maxLength={300} rows={3} required />
+            <div className="task-field-grid">
+              <label className="task-field schedule-field">
+                <span className="task-field-label">Start date</span>
+                <select name="start_date" value={taskStartDay} onChange={(event) => {
+                  const day = Number(event.currentTarget.value);
+                  setTaskStartDay(day);
+                  if (taskEndDay < day) setTaskEndDay(day);
+                }} aria-label="Start date">
+                  {Array.from({ length: 40 }, (_, index) => <option key={index + 1} value={index + 1}>Day {String(index + 1).padStart(2, "0")}{index + 1 === selectedDay ? " · selected" : ""}</option>)}
+                </select>
+              </label>
+              <label className="task-field schedule-field">
+                <span className="task-field-label">End date</span>
+                <select name="end_date" value={taskEndDay} onChange={(event) => setTaskEndDay(Number(event.currentTarget.value))} aria-label="End date">
+                  {Array.from({ length: 40 }, (_, index) => index + 1).filter((day) => day >= taskStartDay).map((day) => <option key={day} value={day}>Day {String(day).padStart(2, "0")}</option>)}
+                </select>
+              </label>
             </div>
             <label className="task-field schedule-field">
-              <span className="task-field-label">Time</span>
-              <select name="schedule" value={taskSchedule} onChange={(event) => setTaskSchedule(event.currentTarget.value as "daily" | "weekly" | "2x" | "3x")} aria-label="Time">
+              <span className="task-field-label">Frequency</span>
+              <select name="frequency" value={taskSchedule} onChange={(event) => setTaskSchedule(event.currentTarget.value as "one-time" | "daily" | "weekly")} aria-label="Frequency">
+                <option value="one-time">One-Time</option>
                 <option value="daily">Daily</option>
                 <option value="weekly">Weekly</option>
-                <option value="2x">2x/Week</option>
-                <option value="3x">3x/Week</option>
               </select>
             </label>
             <div className="task-field-grid">
               <label className="task-field"><span className="task-field-label">Level</span><select name="level" value={taskLevel} onChange={(event) => setTaskLevel(event.currentTarget.value as "Easy" | "Medium" | "Hard")}><option>Easy</option><option>Medium</option><option>Hard</option></select></label>
-              <label className="task-field"><span className="task-field-label">Stardust reward</span><div className="task-reward-preview"><span>✦</span><output aria-live="polite">{taskReward.toLocaleString()} stardust</output></div><small className="task-reward-hint">{taskTargetAmount ? `${taskTargetAmount} × ${levelMultiplier} (${taskLevel.toLowerCase()})` : `${taskLevel} default reward`}</small><input type="hidden" name="reward" value={taskReward} /></label>
+              <label className="task-field"><span className="task-field-label">Total coin</span><div className="task-reward-preview"><span>✦</span><output aria-live="polite">{taskReward.toLocaleString()} coin</output></div><small className="task-reward-hint">Set automatically from the selected level</small></label>
             </div>
             <fieldset className="task-fieldset target-fieldset">
-              <legend className="task-field-label">Target</legend>
+              <legend className="task-field-label">Target (optional)</legend>
               <div className="target-inputs"><input aria-label="Target amount" name="target" type="number" min="0.1" step="any" placeholder="Amount..." value={taskTargetAmount} onChange={(event) => setTaskTargetAmount(event.currentTarget.value)} /><span className="target-divider">/</span><select name="unit" aria-label="Target unit" value={taskUnit} onChange={(event) => setTaskUnit(event.currentTarget.value)}><option value="pages">pages</option><option value="km">km</option><option value="minutes">minutes</option><option value="reps">reps</option><option value="glasses">glasses</option><option value="times">times</option><option value="custom">Custom / Manual</option></select></div>
               {taskUnit === "custom" && <input className="custom-target-unit" aria-label="Custom target unit" name="customUnit" value={customTaskUnit} onChange={(event) => setCustomTaskUnit(event.currentTarget.value)} placeholder="Enter your unit (e.g. chapters)" maxLength={24} required={Boolean(taskTargetAmount.trim())} />}
-              <small className="task-target-hint">Optional · Stardust = target × level multiplier</small>
+              <small className="task-target-hint">Complete with the target achieved for +10 bonus coins. Without a target, completion awards the level coin only.</small>
             </fieldset>
-            <button className="create-task-submit" type="submit">Create task <Icon name="arrow" size={20} /></button>
+            <button className="create-task-submit" type="submit" disabled={taskSaving}>{taskSaving ? "Saving quest..." : "Save quest"} <Icon name="arrow" size={20} /></button>
           </form>
         </section>
       </div>}
@@ -894,23 +1412,38 @@ export default function DashboardClient({
         <section className="progress-editor-screen" role="dialog" aria-modal="true" aria-labelledby="progress-editor-title">
           <header className="progress-editor-heading">
             <button className="progress-editor-back" type="button" onClick={() => setProgressChallengeId(null)} aria-label="Back to challenges"><Icon name="back" size={23} /></button>
-            <h2 id="progress-editor-title">Progress</h2>
-            <button className="progress-editor-delete" type="button" onClick={() => setConfirmChallengeDelete(true)} aria-label="Delete challenge"><Icon name="trash" size={22} /></button>
+            <h2 id="progress-editor-title">{userDailyQuests.some((quest) => quest.id === progressChallengeId) ? "Edit quest" : "Progress"}</h2>
+            {userDailyQuests.some((quest) => quest.id === progressChallengeId) && <button className="progress-editor-delete" type="button" onClick={() => setConfirmChallengeDelete(true)} aria-label="Delete quest"><Icon name="trash" size={22} /></button>}
           </header>
           <form className="progress-editor-form" onSubmit={updateChallenge}>
             <label className="progress-editor-label" htmlFor="progress-task-name">Task name</label>
-            <input className="progress-editor-input progress-title-input" id="progress-task-name" name="title" value={progressTitle} onChange={(event) => setProgressTitle(event.currentTarget.value)} maxLength={60} required />
-            <div className="progress-editor-cover">
-              <img src={getTaskCover(progressTitle, gender)} alt={`Cover for ${progressTitle || "challenge"}`} />
-              <span><Icon name="sparkles" size={15} /> Cover updates with task name</span>
+            <input className="progress-editor-input progress-title-input" id="progress-task-name" name="task_name" value={progressTitle} onChange={(event) => setProgressTitle(event.currentTarget.value)} maxLength={60} required />
+            <label className="progress-editor-label" htmlFor="progress-task-description">Description</label>
+            <textarea className="progress-editor-input" id="progress-task-description" name="short_description" value={progressDescription} onChange={(event) => setProgressDescription(event.currentTarget.value)} maxLength={300} rows={3} />
+            <div className="task-field-grid">
+              <label className="progress-editor-field">
+                <span className="progress-editor-label">Start date</span>
+                <select name="start_date" value={progressStartDay} onChange={(event) => {
+                  const day = Number(event.currentTarget.value);
+                  setProgressStartDay(day);
+                  if (progressEndDay < day) setProgressEndDay(day);
+                }}>
+                  {Array.from({ length: 40 }, (_, index) => <option key={index + 1} value={index + 1}>Day {String(index + 1).padStart(2, "0")}</option>)}
+                </select>
+              </label>
+              <label className="progress-editor-field">
+                <span className="progress-editor-label">End date</span>
+                <select name="end_date" value={progressEndDay} onChange={(event) => setProgressEndDay(Number(event.currentTarget.value))}>
+                  {Array.from({ length: 40 }, (_, index) => index + 1).filter((day) => day >= progressStartDay).map((day) => <option key={day} value={day}>Day {String(day).padStart(2, "0")}</option>)}
+                </select>
+              </label>
             </div>
             <label className="progress-editor-field">
-              <span className="progress-editor-label">Time</span>
-              <select name="schedule" value={progressSchedule} onChange={(event) => setProgressSchedule(event.currentTarget.value as "daily" | "weekly" | "2x" | "3x")}>
+              <span className="progress-editor-label">Frequency</span>
+              <select name="frequency" value={progressSchedule} onChange={(event) => setProgressSchedule(event.currentTarget.value as "one-time" | "daily" | "weekly")}>
+                <option value="one-time">One-Time</option>
                 <option value="daily">Daily</option>
                 <option value="weekly">Weekly</option>
-                <option value="2x">2x/Week</option>
-                <option value="3x">3x/Week</option>
               </select>
             </label>
             <label className="progress-editor-field">
@@ -920,6 +1453,11 @@ export default function DashboardClient({
                 <option>Medium</option>
                 <option>Hard</option>
               </select>
+            </label>
+            <label className="progress-editor-field">
+              <span className="progress-editor-label">Total coin</span>
+              <div className="task-reward-preview"><span>✦</span><output>{progressLevel === "Easy" ? 10 : progressLevel === "Medium" ? 20 : 30} coin</output></div>
+              <small className="task-reward-hint">Automatically set by level; target achievement adds +10 on completion.</small>
             </label>
             <fieldset className="progress-editor-target">
               <legend className="progress-editor-label">Achievement</legend>

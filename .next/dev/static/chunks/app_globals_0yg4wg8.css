@@ -1126,20 +1126,39 @@ h1, h2, h3, p {
   box-shadow: 0 0 7px var(--gold);
 }
 
-.challenge-cover-edit {
-  z-index: 1;
+.user-quest-edit {
+  z-index: 4;
+  color: #a9fff5;
   cursor: pointer;
-  background: none;
-  border: 0;
-  width: 52%;
+  background: #071623d6;
+  border: 1px solid #5cf2e26b;
+  border-radius: 9px;
+  align-items: center;
+  gap: 6px;
+  min-height: 31px;
+  padding: 0 10px;
+  font-size: 9px;
+  font-weight: 800;
+  transition: all .2s;
+  display: flex;
   position: absolute;
-  inset: 0 0 0 48%;
+  top: 17px;
+  right: 22px;
 }
 
-.challenge-cover-edit:focus-visible {
+.user-quest-edit:hover {
+  border-color: var(--cyan);
+  background: #5cf2e21f;
+}
+
+.user-quest-edit:focus-visible {
   outline: 2px solid var(--cyan);
-  outline-offset: -5px;
-  border-radius: 18px;
+  outline-offset: 3px;
+}
+
+.user-quest-edit:disabled {
+  cursor: wait;
+  opacity: .6;
 }
 
 .challenge-card > .card-corner, .challenge-card > .reward-tag, .challenge-card > .challenge-content {
@@ -6281,6 +6300,101 @@ h1, h2, h3, p {
     justify-self: start;
     padding: 6px 9px;
   }
+}
+
+.phase-quest-card {
+  min-height: 264px;
+}
+
+.phase-quest-card > .challenge-content {
+  margin-bottom: 10px;
+}
+
+.phase-progress-editor {
+  z-index: 3;
+  color: #c8d0dc;
+  pointer-events: auto;
+  max-width: 500px;
+  margin-top: 12px;
+  position: relative;
+}
+
+.phase-progress-editor > label {
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+  font-size: 9px;
+  font-weight: 700;
+  display: flex;
+}
+
+.phase-progress-editor > label span {
+  color: #8cf8ed;
+}
+
+.phase-progress-controls {
+  align-items: center;
+  gap: 8px;
+  display: flex;
+}
+
+.phase-progress-controls input {
+  color: #f0fffb;
+  background: #081320cc;
+  border: 1px solid #5cf2e261;
+  border-radius: 7px;
+  width: 90px;
+  padding: 7px 9px;
+  font: 600 11px Manrope, sans-serif;
+}
+
+.phase-progress-controls > span {
+  color: #c8d0dc;
+  font-size: 10px;
+}
+
+.phase-progress-controls button {
+  color: #8cf8ed;
+  cursor: pointer;
+  background: #081320b8;
+  border: 1px solid #5cf2e261;
+  border-radius: 7px;
+  padding: 7px 10px;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.phase-progress-controls button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.phase-progress-editor > small {
+  color: #99a9bc;
+  margin-top: 6px;
+  font-size: 8px;
+  line-height: 1.5;
+  display: block;
+}
+
+.phase-quest-card > .complete-button {
+  width: max-content;
+  margin: 10px 0 4px auto;
+  position: relative;
+  bottom: auto;
+  right: auto;
+}
+
+.phase-quest-card > .card-progress {
+  bottom: 10px;
+}
+
+textarea.task-title-input, textarea.progress-editor-input {
+  resize: vertical;
+  height: auto;
+  min-height: 76px;
+  padding: 12px 15px;
+  line-height: 1.5;
 }
 
 /*# sourceMappingURL=app_globals_0yg4wg8.css.map*/

@@ -315,9 +315,38 @@ create table if not exists public.user_phase_quest_progress (
   primary key (user_id, quest_id)
 );
 
+alter table public.user_phase_quest_progress
+  add column if not exists achieved_amount numeric not null default 0 check (achieved_amount >= 0),
+  add column if not exists earned_coin integer not null default 0 check (earned_coin >= 0),
+  add column if not exists progress_updated boolean not null default false;
+
+alter table public.user_phase_quest_progress
+  alter column completed_at drop not null,
+  alter column completed_at drop default;
+
+update public.user_phase_quest_progress as progress
+  set achieved_amount = case
+        when quest.target ~* '^\s*skala' then replace(
+          substring(quest.target from '([0-9]+([.,][0-9]+)?)[^0-9]*$'),
+          ',',
+          '.'
+        )::numeric
+        else replace(
+          substring(quest.target from '^\s*([0-9]+([.,][0-9]+)?)'),
+          ',',
+          '.'
+        )::numeric
+      end,
+      earned_coin = quest.total_coin,
+      progress_updated = false
+  from public.phase_daily_quests as quest
+  where quest.id = progress.quest_id
+    and progress.completed_at is not null
+    and progress.earned_coin = 0;
+
 alter table public.user_phase_quest_progress enable row level security;
 revoke all on table public.user_phase_quest_progress from public, anon, authenticated;
-grant select, insert, delete on table public.user_phase_quest_progress to authenticated;
+grant select on table public.user_phase_quest_progress to authenticated;
 
 drop policy if exists "Users can read their own phase quest progress" on public.user_phase_quest_progress;
 create policy "Users can read their own phase quest progress"
@@ -327,18 +356,285 @@ create policy "Users can read their own phase quest progress"
   using ((select auth.uid()) = user_id);
 
 drop policy if exists "Users can complete their own phase quests" on public.user_phase_quest_progress;
-create policy "Users can complete their own phase quests"
-  on public.user_phase_quest_progress
+drop policy if exists "Users can undo their own phase quests" on public.user_phase_quest_progress;
+
+create or replace function public.save_phase_quest_progress(
+  p_quest_id text,
+  p_achieved_amount numeric default null,
+  p_is_completed boolean default false
+)
+returns table (
+  quest_id text,
+  achieved_amount numeric,
+  earned_coin integer,
+  progress_updated boolean,
+  completed_at timestamptz
+)
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  current_user_id uuid := (select auth.uid());
+  quest_target text;
+  quest_base_coin integer;
+  target_amount numeric;
+  next_amount numeric;
+  next_progress_updated boolean;
+  next_earned_coin integer;
+  existing_progress public.user_phase_quest_progress%rowtype;
+begin
+  if current_user_id is null then
+    raise exception 'Authentication is required to update quest progress';
+  end if;
+
+  select q.target, q.total_coin
+    into quest_target, quest_base_coin
+    from public.phase_daily_quests as q
+    where q.id = p_quest_id;
+
+  if not found then
+    raise exception 'Daily quest does not exist';
+  end if;
+
+  if quest_target ~* '^\s*skala' then
+    target_amount := replace(
+      substring(quest_target from '([0-9]+([.,][0-9]+)?)[^0-9]*$'),
+      ',',
+      '.'
+    )::numeric;
+  else
+    target_amount := replace(
+      substring(quest_target from '^\s*([0-9]+([.,][0-9]+)?)'),
+      ',',
+      '.'
+    )::numeric;
+  end if;
+
+  if target_amount is null then
+    raise exception 'Daily quest target must begin with a numeric amount';
+  end if;
+
+  select p.*
+    into existing_progress
+    from public.user_phase_quest_progress as p
+    where p.user_id = current_user_id
+      and p.quest_id = p_quest_id
+    for update;
+
+  if p_achieved_amount is not null then
+    if p_achieved_amount < 0 then
+      raise exception 'Progress amount cannot be negative';
+    end if;
+    next_amount := p_achieved_amount;
+    next_progress_updated := true;
+  elsif found then
+    next_amount := existing_progress.achieved_amount;
+    next_progress_updated := existing_progress.progress_updated;
+  else
+    next_amount := case when coalesce(p_is_completed, false) then target_amount else 0 end;
+    next_progress_updated := false;
+  end if;
+
+  next_earned_coin := case
+    when coalesce(p_is_completed, false) then
+      quest_base_coin + case when next_amount >= target_amount then 10 else 0 end
+    else 0
+  end;
+
+  return query
+    insert into public.user_phase_quest_progress as saved_progress (
+      user_id,
+      quest_id,
+      achieved_amount,
+      earned_coin,
+      progress_updated,
+      completed_at
+    )
+    values (
+      current_user_id,
+      p_quest_id,
+      next_amount,
+      next_earned_coin,
+      next_progress_updated,
+      case when coalesce(p_is_completed, false) then now() else null end
+    )
+    on conflict on constraint user_phase_quest_progress_pkey do update
+      set achieved_amount = excluded.achieved_amount,
+          earned_coin = excluded.earned_coin,
+          progress_updated = excluded.progress_updated,
+          completed_at = excluded.completed_at
+    returning saved_progress.quest_id,
+      saved_progress.achieved_amount,
+      saved_progress.earned_coin,
+      saved_progress.progress_updated,
+      saved_progress.completed_at;
+end;
+$$;
+
+revoke execute on function public.save_phase_quest_progress(text, numeric, boolean) from public, anon;
+grant execute on function public.save_phase_quest_progress(text, numeric, boolean) to authenticated;
+notify pgrst, 'reload schema';
+
+create table if not exists public.user_daily_quests (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  task_name text not null check (char_length(task_name) between 1 and 60),
+  short_description text not null,
+  start_date smallint not null check (start_date between 1 and 40),
+  end_date smallint not null check (end_date between 1 and 40),
+  frequency text not null check (frequency in ('One-Time', 'Daily', 'Weekly')),
+  level text not null check (level in ('Easy', 'Medium', 'Hard')),
+  total_coin integer not null default 10 check (total_coin in (10, 20, 30)),
+  day_number smallint not null check (day_number between 1 and 40),
+  start_day smallint not null default 1 check (start_day between 1 and 40),
+  end_day smallint not null default 1 check (end_day between 1 and 40),
+  title text not null check (char_length(title) between 1 and 60),
+  description text not null default '' check (char_length(description) <= 300),
+  schedule text not null check (schedule in ('one-time', 'daily', 'weekly')),
+  target_amount numeric check (target_amount is null or target_amount > 0),
+  target_unit text,
+  achieved_amount numeric not null default 0 check (achieved_amount >= 0),
+  is_completed boolean not null default false,
+  earned_coin integer not null default 0 check (earned_coin >= 0),
+  created_at timestamptz not null default now(),
+  check (end_day >= start_day),
+  check ((target_amount is null and target_unit is null) or (target_amount is not null and target_unit is not null and char_length(target_unit) between 1 and 24))
+);
+
+alter table public.user_daily_quests
+  add column if not exists start_day smallint not null default 1,
+  add column if not exists end_day smallint not null default 1,
+  add column if not exists short_description text not null default '',
+  add column if not exists total_coin integer not null default 10,
+  add column if not exists task_name text not null default '',
+  add column if not exists start_date smallint not null default 1,
+  add column if not exists end_date smallint not null default 1,
+  add column if not exists frequency text not null default 'One-Time';
+
+alter table public.user_daily_quests
+  drop constraint if exists user_daily_quests_schedule_check;
+
+update public.user_daily_quests
+  set start_day = day_number,
+      end_day = day_number,
+      short_description = description,
+      schedule = case when schedule in ('2x', '3x') then 'weekly' else schedule end,
+      total_coin = case level when 'Easy' then 10 when 'Medium' then 20 when 'Hard' then 30 else 10 end,
+      task_name = title,
+      start_date = day_number,
+      end_date = day_number,
+      frequency = case schedule when 'daily' then 'Daily' when 'weekly' then 'Weekly' when '2x' then 'Weekly' when '3x' then 'Weekly' else 'One-Time' end
+  where start_day = 1
+    and end_day = 1
+    and (day_number <> 1 or short_description = '' or task_name = '' or schedule in ('2x', '3x'));
+
+update public.user_daily_quests
+  set task_name = title,
+      start_date = start_day,
+      end_date = end_day,
+      frequency = case schedule when 'daily' then 'Daily' when 'weekly' then 'Weekly' when '2x' then 'Weekly' when '3x' then 'Weekly' else 'One-Time' end
+  where task_name = ''
+     or start_date = 1 and start_day <> 1
+     or end_date = 1 and end_day <> 1;
+
+alter table public.user_daily_quests
+  add constraint user_daily_quests_schedule_check check (schedule in ('one-time', 'daily', 'weekly')),
+  drop constraint if exists user_daily_quests_frequency_check,
+  add constraint user_daily_quests_frequency_check check (frequency in ('One-Time', 'Daily', 'Weekly')),
+  drop constraint if exists user_daily_quests_start_date_check,
+  add constraint user_daily_quests_start_date_check check (start_date between 1 and 40),
+  drop constraint if exists user_daily_quests_end_date_check,
+  add constraint user_daily_quests_end_date_check check (end_date between 1 and 40),
+  drop constraint if exists user_daily_quests_task_name_check,
+  add constraint user_daily_quests_task_name_check check (char_length(task_name) between 1 and 60),
+  drop constraint if exists user_daily_quests_short_description_check,
+  add constraint user_daily_quests_short_description_check check (char_length(short_description) <= 300),
+  drop constraint if exists user_daily_quests_start_day_check,
+  add constraint user_daily_quests_start_day_check check (start_day between 1 and 40),
+  drop constraint if exists user_daily_quests_end_day_check,
+  add constraint user_daily_quests_end_day_check check (end_day between 1 and 40),
+  drop constraint if exists user_daily_quests_total_coin_check,
+  add constraint user_daily_quests_total_coin_check check (total_coin in (10, 20, 30)),
+  drop constraint if exists user_daily_quests_check,
+  drop constraint if exists user_daily_quests_day_range_check,
+  add constraint user_daily_quests_day_range_check check (end_day >= start_day);
+
+alter table public.user_daily_quests
+  drop constraint if exists user_daily_quests_date_range_check,
+  add constraint user_daily_quests_date_range_check check (end_date >= start_date);
+
+create or replace function public.enforce_user_daily_quest_reward()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  new.title := new.task_name;
+  new.day_number := new.start_date;
+  new.start_day := new.start_date;
+  new.end_day := new.end_date;
+  new.description := new.short_description;
+  new.schedule := case new.frequency
+    when 'Daily' then 'daily'
+    when 'Weekly' then 'weekly'
+    else 'one-time'
+  end;
+  new.total_coin := case new.level
+    when 'Easy' then 10
+    when 'Medium' then 20
+    when 'Hard' then 30
+  end;
+  new.earned_coin := case
+    when new.is_completed then
+      new.total_coin + case
+        when new.target_amount is not null and new.achieved_amount >= new.target_amount then 10
+        else 0
+      end
+    else 0
+  end;
+  return new;
+end;
+$$;
+
+drop trigger if exists enforce_user_daily_quest_reward on public.user_daily_quests;
+create trigger enforce_user_daily_quest_reward
+  before insert or update on public.user_daily_quests
+  for each row execute procedure public.enforce_user_daily_quest_reward();
+
+alter table public.user_daily_quests enable row level security;
+revoke all on table public.user_daily_quests from public, anon, authenticated;
+grant select, insert, update, delete on table public.user_daily_quests to authenticated;
+
+drop policy if exists "Users can read their own daily quests" on public.user_daily_quests;
+create policy "Users can read their own daily quests"
+  on public.user_daily_quests
+  for select
+  to authenticated
+  using ((select auth.uid()) = user_id);
+
+drop policy if exists "Users can create their own daily quests" on public.user_daily_quests;
+create policy "Users can create their own daily quests"
+  on public.user_daily_quests
   for insert
   to authenticated
   with check ((select auth.uid()) = user_id);
 
-drop policy if exists "Users can undo their own phase quests" on public.user_phase_quest_progress;
-create policy "Users can undo their own phase quests"
-  on public.user_phase_quest_progress
+drop policy if exists "Users can update their own daily quests" on public.user_daily_quests;
+create policy "Users can update their own daily quests"
+  on public.user_daily_quests
+  for update
+  to authenticated
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
+
+drop policy if exists "Users can delete their own daily quests" on public.user_daily_quests;
+create policy "Users can delete their own daily quests"
+  on public.user_daily_quests
   for delete
   to authenticated
   using ((select auth.uid()) = user_id);
+notify pgrst, 'reload schema';
 
 drop policy if exists "Users can read their own profile" on public.profiles;
 create policy "Users can read their own profile"

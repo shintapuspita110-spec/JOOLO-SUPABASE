@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 import DashboardClient from "@/app/dashboard/dashboard-client";
 import { createClient } from "@/lib/supabase/server";
 import type { UploadedBonusResource } from "@/lib/bonus";
-import type { PhaseDailyQuest } from "@/lib/phase-quests";
+import type { PhaseDailyQuest, PhaseQuestProgress } from "@/lib/phase-quests";
+import type { UserDailyQuest } from "@/lib/user-daily-quests";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -72,11 +73,21 @@ export default async function DashboardPage() {
 
   const { data: phaseQuestProgress, error: phaseQuestProgressError } = await supabase
     .from("user_phase_quest_progress")
-    .select("quest_id")
+    .select("quest_id, achieved_amount, earned_coin, progress_updated, completed_at")
     .eq("user_id", user.id);
 
   if (phaseQuestProgressError) {
     throw new Error(`Could not load your phase quest progress: ${phaseQuestProgressError.message}`);
+  }
+
+  const { data: userDailyQuests, error: userDailyQuestsError } = await supabase
+    .from("user_daily_quests")
+    .select("id, user_id, task_name, short_description, start_date, end_date, frequency, level, total_coin, target_amount, target_unit, achieved_amount, is_completed, earned_coin")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: true });
+
+  if (userDailyQuestsError) {
+    throw new Error(`Could not load your custom daily quests: ${userDailyQuestsError.message}`);
   }
 
   const metadataName = user.user_metadata.full_name;
@@ -90,7 +101,8 @@ export default async function DashboardPage() {
       uploadedResources={(bonusResources ?? []) as UploadedBonusResource[]}
       initialStartDate={challengeStartDate}
       phaseDailyQuests={(phaseDailyQuests ?? []) as PhaseDailyQuest[]}
-      completedPhaseQuestIds={(phaseQuestProgress ?? []).map((item) => item.quest_id)}
+      phaseQuestProgress={(phaseQuestProgress ?? []) as PhaseQuestProgress[]}
+      userDailyQuests={(userDailyQuests ?? []) as UserDailyQuest[]}
     />
   );
 }

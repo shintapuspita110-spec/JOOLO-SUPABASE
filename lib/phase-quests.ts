@@ -15,3 +15,11 @@ export type PhaseDailyQuest = {
   soft_skills: string;
   max_possible_coin: number;
 };
+
+export type PhaseQuestProgress = {
+  quest_id: string;
+  achieved_amount: number;
+  earned_coin: number;
+  progress_updated: boolean;
+  completed_at: string | null;
+};
