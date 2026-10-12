@@ -17,13 +17,54 @@ grant select on table public.profiles to authenticated;
 create table if not exists public.challenge_settings (
   user_id uuid primary key references public.profiles (id) on delete cascade,
   start_date date not null default current_date,
+  lives smallint not null default 7,
+  last_evaluated_day smallint,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
+alter table public.challenge_settings
+  add column if not exists lives smallint not null default 7,
+  add column if not exists last_evaluated_day smallint;
+
+update public.challenge_settings
+  set last_evaluated_day = least(40, greatest(0, current_date - start_date))
+  where last_evaluated_day is null;
+
+alter table public.challenge_settings
+  alter column last_evaluated_day set default 0,
+  alter column last_evaluated_day set not null,
+  drop constraint if exists challenge_settings_lives_check,
+  add constraint challenge_settings_lives_check check (lives between 0 and 7),
+  drop constraint if exists challenge_settings_last_evaluated_day_check,
+  add constraint challenge_settings_last_evaluated_day_check check (last_evaluated_day between 0 and 40);
+
 alter table public.challenge_settings enable row level security;
 revoke all on table public.challenge_settings from public, anon, authenticated;
-grant select, insert, update on table public.challenge_settings to authenticated;
+grant select on table public.challenge_settings to authenticated;
+grant insert (user_id, start_date, updated_at) on table public.challenge_settings to authenticated;
+grant update (start_date, updated_at) on table public.challenge_settings to authenticated;
+
+create or replace function public.reset_challenge_lives_on_start_date_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if new.start_date is distinct from old.start_date then
+    new.last_evaluated_day := 0;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists reset_challenge_lives_on_start_date_change on public.challenge_settings;
+create trigger reset_challenge_lives_on_start_date_change
+  before update of start_date on public.challenge_settings
+  for each row execute procedure public.reset_challenge_lives_on_start_date_change();
+
+revoke execute on function public.reset_challenge_lives_on_start_date_change() from public, anon, authenticated;
 
 drop policy if exists "Users can read their own challenge settings" on public.challenge_settings;
 create policy "Users can read their own challenge settings"
@@ -46,6 +87,46 @@ create policy "Users can update their own challenge settings"
   to authenticated
   using ((select auth.uid()) = user_id)
   with check ((select auth.uid()) = user_id);
+
+create or replace function public.save_challenge_start_date(p_start_date date)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  current_user_id uuid := (select auth.uid());
+  settings_row public.challenge_settings%rowtype;
+begin
+  if current_user_id is null then
+    raise exception 'Authentication is required to save the challenge start date';
+  end if;
+  if p_start_date is null then
+    raise exception 'A challenge start date is required';
+  end if;
+
+  update public.challenge_settings as settings
+    set start_date = p_start_date,
+        updated_at = now()
+    where settings.user_id = current_user_id
+    returning settings.* into settings_row;
+
+  if not found then
+    insert into public.challenge_settings (user_id, start_date)
+      values (current_user_id, p_start_date)
+      returning * into settings_row;
+  end if;
+
+  return jsonb_build_object(
+    'start_date', settings_row.start_date,
+    'lives', settings_row.lives,
+    'last_evaluated_day', settings_row.last_evaluated_day
+  );
+end;
+$$;
+
+revoke execute on function public.save_challenge_start_date(date) from public, anon;
+grant execute on function public.save_challenge_start_date(date) to authenticated;
 
 insert into public.challenge_settings (user_id)
 select id from public.profiles
@@ -496,6 +577,7 @@ create table if not exists public.user_daily_quests (
   target_unit text,
   achieved_amount numeric not null default 0 check (achieved_amount >= 0),
   is_completed boolean not null default false,
+  completed_at timestamptz,
   earned_coin integer not null default 0 check (earned_coin >= 0),
   created_at timestamptz not null default now(),
   check (end_day >= start_day),
@@ -510,7 +592,13 @@ alter table public.user_daily_quests
   add column if not exists task_name text not null default '',
   add column if not exists start_date smallint not null default 1,
   add column if not exists end_date smallint not null default 1,
-  add column if not exists frequency text not null default 'One-Time';
+  add column if not exists frequency text not null default 'One-Time',
+  add column if not exists completed_at timestamptz;
+
+update public.user_daily_quests
+  set completed_at = created_at
+  where is_completed
+    and completed_at is null;
 
 alter table public.user_daily_quests
   drop constraint if exists user_daily_quests_schedule_check;
@@ -585,6 +673,17 @@ begin
     when 'Medium' then 20
     when 'Hard' then 30
   end;
+  if new.is_completed then
+    if tg_op = 'INSERT' then
+      new.completed_at := now();
+    elsif not old.is_completed then
+      new.completed_at := now();
+    else
+      new.completed_at := coalesce(new.completed_at, old.completed_at, now());
+    end if;
+  else
+    new.completed_at := null;
+  end if;
   new.earned_coin := case
     when new.is_completed then
       new.total_coin + case
@@ -601,6 +700,86 @@ drop trigger if exists enforce_user_daily_quest_reward on public.user_daily_ques
 create trigger enforce_user_daily_quest_reward
   before insert or update on public.user_daily_quests
   for each row execute procedure public.enforce_user_daily_quest_reward();
+
+create table if not exists public.coin_wallets (
+  user_id uuid primary key references public.profiles (id) on delete cascade,
+  balance integer not null default 0 check (balance >= 0),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.coin_wallets enable row level security;
+revoke all on table public.coin_wallets from public, anon, authenticated;
+grant select on table public.coin_wallets to authenticated;
+
+drop policy if exists "Users can read their own coin wallet" on public.coin_wallets;
+create policy "Users can read their own coin wallet"
+  on public.coin_wallets
+  for select
+  to authenticated
+  using ((select auth.uid()) = user_id);
+
+create or replace function public.sync_challenge_coin_wallet()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  wallet_user_id uuid;
+  coin_delta integer;
+begin
+  if tg_op = 'INSERT' then
+    wallet_user_id := new.user_id;
+    coin_delta := new.earned_coin;
+  elsif tg_op = 'DELETE' then
+    wallet_user_id := old.user_id;
+    coin_delta := -old.earned_coin;
+  else
+    wallet_user_id := new.user_id;
+    coin_delta := new.earned_coin - old.earned_coin;
+  end if;
+
+  insert into public.coin_wallets as wallet (user_id, balance, updated_at)
+    values (wallet_user_id, greatest(0, coin_delta), now())
+    on conflict (user_id) do update
+      set balance = greatest(0, wallet.balance + coin_delta),
+          updated_at = now();
+
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists sync_phase_challenge_coin_wallet on public.user_phase_quest_progress;
+create trigger sync_phase_challenge_coin_wallet
+  after insert or update or delete on public.user_phase_quest_progress
+  for each row execute procedure public.sync_challenge_coin_wallet();
+
+drop trigger if exists sync_custom_challenge_coin_wallet on public.user_daily_quests;
+create trigger sync_custom_challenge_coin_wallet
+  after insert or update or delete on public.user_daily_quests
+  for each row execute procedure public.sync_challenge_coin_wallet();
+
+revoke execute on function public.sync_challenge_coin_wallet() from public, anon, authenticated;
+
+insert into public.coin_wallets (user_id, balance)
+  select earned.user_id, sum(earned.earned_coin)::integer
+  from (
+    select progress.user_id, progress.earned_coin
+    from public.user_phase_quest_progress as progress
+    union all
+    select quest.user_id, quest.earned_coin
+    from public.user_daily_quests as quest
+  ) as earned
+  group by earned.user_id
+  on conflict (user_id) do nothing;
+
+insert into public.coin_wallets (user_id)
+  select profile.id
+  from public.profiles as profile
+  on conflict (user_id) do nothing;
 
 alter table public.user_daily_quests enable row level security;
 revoke all on table public.user_daily_quests from public, anon, authenticated;
@@ -634,6 +813,148 @@ create policy "Users can delete their own daily quests"
   for delete
   to authenticated
   using ((select auth.uid()) = user_id);
+
+create or replace function public.process_challenge_lives(p_timezone text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  current_user_id uuid := (select auth.uid());
+  settings_row public.challenge_settings%rowtype;
+  today_local date;
+  day_start timestamptz;
+  day_end timestamptz;
+  latest_closed_day smallint;
+  day_to_check smallint;
+  lives_remaining smallint;
+  coins_remaining integer;
+  lives_purchased integer := 0;
+  has_completed_quest boolean;
+begin
+  if current_user_id is null then
+    raise exception 'Authentication is required to process challenge lives';
+  end if;
+
+  if p_timezone is null or not exists (
+    select 1 from pg_catalog.pg_timezone_names where name = p_timezone
+  ) then
+    raise exception 'A valid time zone is required to process challenge lives';
+  end if;
+
+  select settings.*
+    into settings_row
+    from public.challenge_settings as settings
+    where settings.user_id = current_user_id
+    for update;
+
+  if not found then
+    raise exception 'Challenge settings do not exist for this user';
+  end if;
+
+  select wallet.balance
+    into coins_remaining
+    from public.coin_wallets as wallet
+    where wallet.user_id = current_user_id
+    for update;
+
+  if not found then
+    raise exception 'Coin wallet does not exist for this user';
+  end if;
+
+  today_local := (now() at time zone p_timezone)::date;
+  latest_closed_day := least(40, greatest(0, today_local - settings_row.start_date));
+  lives_remaining := settings_row.lives;
+
+  for day_to_check in (settings_row.last_evaluated_day + 1)..latest_closed_day loop
+    day_start := ((settings_row.start_date + (day_to_check - 1))::timestamp at time zone p_timezone);
+    day_end := ((settings_row.start_date + day_to_check)::timestamp at time zone p_timezone);
+
+    select
+      exists (
+        select 1
+        from public.user_phase_quest_progress as progress
+        join public.phase_daily_quests as quest on quest.id = progress.quest_id
+        where progress.user_id = current_user_id
+          and quest.day_number = day_to_check
+          and progress.completed_at >= day_start
+          and progress.completed_at < day_end
+      )
+      or exists (
+        select 1
+        from public.user_daily_quests as quest
+        where quest.user_id = current_user_id
+          and quest.start_date <= day_to_check
+          and quest.end_date >= day_to_check
+          and quest.completed_at >= day_start
+          and quest.completed_at < day_end
+      )
+      into has_completed_quest;
+
+    if not has_completed_quest then
+      lives_remaining := lives_remaining - 1;
+      if lives_remaining <= 0 then
+        if coins_remaining >= 250 then
+          coins_remaining := coins_remaining - 250;
+          lives_purchased := lives_purchased + 1;
+          lives_remaining := 1;
+
+          update public.coin_wallets as wallet
+            set balance = coins_remaining,
+                updated_at = now()
+            where wallet.user_id = current_user_id;
+          continue;
+        end if;
+
+        delete from public.user_phase_quest_progress as progress
+          where progress.user_id = current_user_id;
+        delete from public.user_daily_quests as quest
+          where quest.user_id = current_user_id;
+        update public.coin_wallets as wallet
+          set balance = 0,
+              updated_at = now()
+          where wallet.user_id = current_user_id;
+        update public.challenge_settings as settings
+          set start_date = today_local,
+              lives = 7,
+              last_evaluated_day = 0,
+              updated_at = now()
+          where settings.user_id = current_user_id
+          returning settings.* into settings_row;
+
+        return jsonb_build_object(
+          'lives', settings_row.lives,
+          'life_reset', true,
+          'start_date', settings_row.start_date,
+          'last_evaluated_day', settings_row.last_evaluated_day,
+          'coin_balance', 0,
+          'lives_purchased', lives_purchased
+        );
+      end if;
+    end if;
+  end loop;
+
+  update public.challenge_settings as settings
+    set lives = lives_remaining,
+        last_evaluated_day = greatest(settings_row.last_evaluated_day, latest_closed_day),
+        updated_at = now()
+    where settings.user_id = current_user_id
+    returning settings.* into settings_row;
+
+  return jsonb_build_object(
+    'lives', settings_row.lives,
+    'life_reset', false,
+    'start_date', settings_row.start_date,
+    'last_evaluated_day', settings_row.last_evaluated_day,
+    'coin_balance', coins_remaining,
+    'lives_purchased', lives_purchased
+  );
+end;
+$$;
+
+revoke execute on function public.process_challenge_lives(text) from public, anon;
+grant execute on function public.process_challenge_lives(text) to authenticated;
 notify pgrst, 'reload schema';
 
 drop policy if exists "Users can read their own profile" on public.profiles;
@@ -661,6 +982,10 @@ begin
         full_name = excluded.full_name;
 
   insert into public.challenge_settings (user_id)
+  values (new.id)
+  on conflict (user_id) do nothing;
+
+  insert into public.coin_wallets (user_id)
   values (new.id)
   on conflict (user_id) do nothing;
 
@@ -769,3 +1094,121 @@ create policy "Admins can delete bonus covers"
 
 -- Promote an existing profile manually in the SQL Editor:
 -- update public.profiles set role = 'admin' where email = 'admin@example.com';
+
+create table if not exists public.certificate_monthly_sequences (
+  issue_month date primary key,
+  last_number bigint not null check (last_number > 0)
+);
+
+alter table public.certificate_monthly_sequences enable row level security;
+revoke all on table public.certificate_monthly_sequences from public, anon, authenticated;
+
+create table if not exists public.user_certificates (
+  user_id uuid primary key references public.profiles (id) on delete cascade,
+  verification_code text not null unique,
+  issued_at timestamptz not null
+);
+
+update public.user_certificates
+  set verification_code = left(verification_code, length(verification_code) - 4)
+    || lpad(right(verification_code, 4), 5, '0')
+  where verification_code ~ '/[0-9]{4}$';
+
+alter table public.user_certificates enable row level security;
+revoke all on table public.user_certificates from public, anon, authenticated;
+
+create or replace function public.issue_40_day_certificate()
+returns table (
+  verification_code text,
+  issued_at timestamptz
+)
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  current_user_id uuid := (select auth.uid());
+  existing_certificate public.user_certificates%rowtype;
+  issued_time timestamptz;
+  sequence_month date;
+  month_number integer;
+  serial_number bigint;
+  month_roman text;
+  completed_days integer;
+  verification_id text;
+begin
+  if current_user_id is null then
+    raise exception 'Authentication is required to claim a certificate';
+  end if;
+
+  perform 1
+    from public.profiles as profile
+    where profile.id = current_user_id
+    for update;
+
+  if not found then
+    raise exception 'A profile is required to claim a certificate';
+  end if;
+
+  select count(distinct quest.day_number)::integer
+    into completed_days
+    from public.user_phase_quest_progress as progress
+    join public.phase_daily_quests as quest on quest.id = progress.quest_id
+    where progress.user_id = current_user_id
+      and progress.completed_at is not null
+      and quest.day_number between 1 and 40;
+
+  if completed_days < 40 then
+    raise exception 'Complete at least one challenge on each of the 40 days before claiming a certificate';
+  end if;
+
+  select certificate.*
+    into existing_certificate
+    from public.user_certificates as certificate
+    where certificate.user_id = current_user_id;
+
+  if found then
+    return query
+      select existing_certificate.verification_code, existing_certificate.issued_at;
+    return;
+  end if;
+
+  issued_time := clock_timestamp();
+  sequence_month := date_trunc('month', issued_time at time zone 'Asia/Jakarta')::date;
+  month_number := extract(month from issued_time at time zone 'Asia/Jakarta')::integer;
+  month_roman := (array['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'])[month_number];
+
+  insert into public.certificate_monthly_sequences as monthly_sequence (issue_month, last_number)
+    values (sequence_month, 1)
+    on conflict on constraint certificate_monthly_sequences_pkey do update
+      set last_number = monthly_sequence.last_number + 1
+    returning last_number into serial_number;
+
+  verification_id := 'JOOLO/40DC/'
+    || month_roman
+    || '/'
+    || to_char(issued_time at time zone 'Asia/Jakarta', 'YYYY')
+    || '/'
+    || lpad(serial_number::text, 5, '0');
+
+  insert into public.user_certificates as certificate (user_id, verification_code, issued_at)
+    values (current_user_id, verification_id, issued_time)
+    on conflict (user_id) do nothing
+    returning certificate.verification_code, certificate.issued_at
+      into verification_id, issued_time;
+
+  if not found then
+    select certificate.verification_code, certificate.issued_at
+      into verification_id, issued_time
+      from public.user_certificates as certificate
+      where certificate.user_id = current_user_id;
+  end if;
+
+  return query select verification_id, issued_time;
+end;
+$$;
+
+revoke execute on function public.issue_40_day_certificate() from public, anon;
+grant execute on function public.issue_40_day_certificate() to authenticated;
+
+drop function if exists public.verify_40_day_certificate(text);

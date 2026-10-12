@@ -18,7 +18,7 @@ export default async function DashboardPage() {
 
   const { data: challengeSettings, error: challengeSettingsError } = await supabase
     .from("challenge_settings")
-    .select("start_date")
+    .select("start_date, lives")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -31,13 +31,23 @@ export default async function DashboardPage() {
     const { data: createdSettings, error: createSettingsError } = await supabase
       .from("challenge_settings")
       .insert({ user_id: user.id })
-      .select("start_date")
+      .select("start_date, lives")
       .single();
 
     if (createSettingsError) {
       throw new Error(`Could not initialize your challenge start date: ${createSettingsError.message}`);
     }
     challengeStartDate = createdSettings.start_date;
+  }
+
+  const { data: coinWallet, error: coinWalletError } = await supabase
+    .from("coin_wallets")
+    .select("balance")
+    .eq("user_id", user.id)
+    .single();
+
+  if (coinWalletError) {
+    throw new Error(`Could not load your coin balance: ${coinWalletError.message}`);
   }
 
   const { data: profile, error: profileError } = await supabase
@@ -68,7 +78,7 @@ export default async function DashboardPage() {
     .order("id", { ascending: true });
 
   if (phaseDailyQuestsError) {
-    throw new Error(`Could not load phase daily quests: ${phaseDailyQuestsError.message}`);
+    throw new Error(`Could not load phase daily challenges: ${phaseDailyQuestsError.message}`);
   }
 
   const { data: phaseQuestProgress, error: phaseQuestProgressError } = await supabase
@@ -77,7 +87,7 @@ export default async function DashboardPage() {
     .eq("user_id", user.id);
 
   if (phaseQuestProgressError) {
-    throw new Error(`Could not load your phase quest progress: ${phaseQuestProgressError.message}`);
+    throw new Error(`Could not load your phase challenge progress: ${phaseQuestProgressError.message}`);
   }
 
   const { data: userDailyQuests, error: userDailyQuestsError } = await supabase
@@ -87,7 +97,7 @@ export default async function DashboardPage() {
     .order("created_at", { ascending: true });
 
   if (userDailyQuestsError) {
-    throw new Error(`Could not load your custom daily quests: ${userDailyQuestsError.message}`);
+    throw new Error(`Could not load your custom daily challenges: ${userDailyQuestsError.message}`);
   }
 
   const metadataName = user.user_metadata.full_name;
@@ -100,6 +110,8 @@ export default async function DashboardPage() {
       isAdmin={profile?.role === "admin"}
       uploadedResources={(bonusResources ?? []) as UploadedBonusResource[]}
       initialStartDate={challengeStartDate}
+      initialLives={challengeSettings?.lives ?? 7}
+      initialCoins={coinWallet.balance}
       phaseDailyQuests={(phaseDailyQuests ?? []) as PhaseDailyQuest[]}
       phaseQuestProgress={(phaseQuestProgress ?? []) as PhaseQuestProgress[]}
       userDailyQuests={(userDailyQuests ?? []) as UserDailyQuest[]}

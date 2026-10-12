@@ -150,6 +150,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   transition: color .2s;
 }
 
+.main-nav button.nav-link {
+  appearance: none;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  padding: 0;
+  font-family: inherit;
+}
+
 .nav-link:hover, .nav-link.active {
   color: #fff;
 }
@@ -192,6 +201,47 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   color: var(--cyan);
   background: #5cf2e214;
   border-color: #5cf2e266;
+}
+
+.language-selector {
+  color: #c8d2e5;
+  border: 1px solid #0000;
+  border-radius: 10px;
+  align-items: center;
+  gap: 7px;
+  height: 38px;
+  padding: 0 8px;
+  transition: all .2s;
+  display: flex;
+}
+
+.language-selector:hover, .language-selector:focus-within {
+  color: var(--cyan);
+  background: #5cf2e214;
+  border-color: #5cf2e266;
+}
+
+.language-selector select {
+  appearance: none;
+  max-width: 88px;
+  color: inherit;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  outline: 0;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.language-selector option {
+  color: #eef3ff;
+  background: #101b2e;
+}
+
+.language-selector > svg:last-child {
+  pointer-events: none;
+  transform: rotate(90deg);
 }
 
 .mobile-cta {
@@ -1801,8 +1851,25 @@ h1, h2, h3, p {
     height: 32px;
   }
 
-  .language-button {
-    display: none;
+  .language-selector {
+    gap: 4px;
+    height: 32px;
+    padding: 0 4px;
+  }
+
+  .language-selector > svg:first-child {
+    width: 17px;
+    height: 17px;
+  }
+
+  .language-selector > svg:last-child {
+    width: 11px;
+    height: 11px;
+  }
+
+  .language-selector select {
+    max-width: 65px;
+    font-size: 9px;
   }
 
   .page-content {
@@ -4677,6 +4744,25 @@ h1, h2, h3, p {
   box-shadow: 0 0 27px #37d7da3d;
 }
 
+.progress-editor-backdrop {
+  overflow: hidden;
+}
+
+.progress-editor-screen {
+  overscroll-behavior: contain;
+  max-height: calc(100svh - 40px);
+  overflow-y: auto;
+}
+
+.progress-editor-heading {
+  z-index: 2;
+  background: linear-gradient(#0f1d31fc, #0f1d31f5);
+  flex-shrink: 0;
+  padding: 8px 0;
+  position: sticky;
+  top: 0;
+}
+
 .progress-delete-backdrop {
   z-index: 2;
   -webkit-backdrop-filter: blur(7px);
@@ -4962,6 +5048,19 @@ h1, h2, h3, p {
 
   .progress-delete-dialog {
     padding: 22px;
+  }
+
+  .progress-editor-screen {
+    height: 100svh;
+    max-height: 100svh;
+    overflow-y: auto;
+  }
+
+  .progress-editor-heading {
+    background: #0f1d31fc;
+    margin: 0 -22px 16px;
+    padding: 8px 22px;
+    top: 0;
   }
 }
 
@@ -6395,6 +6494,285 @@ textarea.task-title-input, textarea.progress-editor-input {
   min-height: 76px;
   padding: 12px 15px;
   line-height: 1.5;
+}
+
+.hero-overview {
+  min-width: 0;
+}
+
+.overview-cards {
+  grid-template-rows: repeat(2, minmax(104px, auto));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.phase-card {
+  grid-row: auto;
+  gap: 11px;
+  padding: 14px;
+}
+
+.phase-emblem {
+  border-radius: 13px;
+  flex-basis: 42px;
+  width: 42px;
+  height: 42px;
+}
+
+.phase-emblem svg {
+  width: 27px;
+  height: 27px;
+}
+
+.phase-card > div:nth-child(2) {
+  min-width: 0;
+}
+
+.phase-card strong {
+  white-space: normal;
+  font-size: 13px;
+}
+
+.phase-card small {
+  max-width: 220px;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.phase-index {
+  font-size: 28px;
+}
+
+.cue-card {
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 5px;
+  padding: 14px 17px;
+  display: flex;
+}
+
+.cue-card .card-kicker {
+  margin: 0;
+}
+
+.rank-card strong {
+  color: #a6f6f0;
+  text-shadow: 0 0 15px #5cf2e230;
+  font: 800 30px Manrope, sans-serif;
+}
+
+.cue-card > small, .lives-note {
+  color: #98a8be;
+  font-size: 8px;
+}
+
+.stat-card {
+  min-height: 0;
+}
+
+.stat-card strong {
+  font-size: 26px;
+}
+
+.stat-label {
+  bottom: 12px;
+}
+
+.lives-card {
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  padding: 13px 16px;
+  display: flex;
+}
+
+.lives-heading {
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  display: flex;
+}
+
+.lives-heading .card-kicker {
+  margin: 0;
+}
+
+.lives-heading strong {
+  color: #f1f6ff;
+  white-space: nowrap;
+  font: 800 21px Manrope, sans-serif;
+}
+
+.lives-heading strong small {
+  color: #95a4bb;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.life-pips {
+  color: #fb758f3b;
+  align-items: center;
+  gap: 5px;
+  font-size: 14px;
+  line-height: 1;
+  display: flex;
+}
+
+.life-pips .life-active {
+  color: #fb758f;
+  text-shadow: 0 0 8px #ff68967a;
+}
+
+.lives-note {
+  line-height: 1.3;
+}
+
+.hero-overview > .start-card {
+  grid-column: auto;
+  justify-self: end;
+  gap: 7px;
+  width: max-content;
+  min-height: 35px;
+  margin-top: 10px;
+  padding: 0 12px;
+  font-size: 7px;
+}
+
+.hero-overview > .start-card strong {
+  font-size: 10px;
+}
+
+.hero-overview > .start-card .start-date-edit {
+  bottom: 5px;
+  left: 19px;
+}
+
+@media (max-width: 850px) {
+  .overview-cards {
+    grid-template-rows: repeat(2, minmax(100px, auto));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .overview-cards {
+    grid-template-rows: repeat(2, minmax(94px, auto));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .phase-card {
+    gap: 8px;
+    padding: 11px;
+  }
+
+  .phase-emblem {
+    border-radius: 11px;
+    flex-basis: 35px;
+    width: 35px;
+    height: 35px;
+  }
+
+  .phase-emblem svg {
+    width: 23px;
+    height: 23px;
+  }
+
+  .phase-card strong {
+    font-size: 11px;
+  }
+
+  .phase-card small {
+    font-size: 7px;
+  }
+
+  .phase-index {
+    font-size: 24px;
+    top: 6px;
+    right: 9px;
+  }
+
+  .cue-card {
+    padding: 11px 12px;
+  }
+
+  .cue-card .card-kicker {
+    letter-spacing: 1px;
+    font-size: 6px;
+  }
+
+  .rank-card strong {
+    font-size: 25px;
+  }
+
+  .cue-card > small, .lives-note {
+    font-size: 7px;
+  }
+
+  .stat-card strong {
+    font-size: 21px;
+  }
+
+  .stat-icon {
+    width: 23px;
+    height: 23px;
+    font-size: 12px;
+  }
+
+  .stat-label {
+    font-size: 7px;
+    bottom: 9px;
+  }
+
+  .lives-card {
+    gap: 6px;
+    padding: 10px 11px;
+  }
+
+  .lives-heading strong {
+    font-size: 18px;
+  }
+
+  .lives-heading strong small {
+    font-size: 9px;
+  }
+
+  .life-pips {
+    gap: 3px;
+    font-size: 11px;
+  }
+
+  .hero-overview > .start-card {
+    min-height: 32px;
+    margin-top: 8px;
+    padding: 0 9px;
+    font-size: 6px;
+  }
+
+  .hero-overview > .start-card strong {
+    font-size: 9px;
+  }
+}
+
+@media (max-width: 390px) {
+  .overview-cards {
+    grid-template-rows: repeat(2, minmax(88px, auto));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .cue-card {
+    padding-inline: 9px;
+  }
+
+  .life-pips {
+    gap: 2px;
+    font-size: 10px;
+  }
+
+  .lives-note {
+    font-size: 6px;
+  }
 }
 
 /*# sourceMappingURL=app_globals_0yg4wg8.css.map*/

@@ -1,8 +1,8 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, PDFName, PDFRawStream, StandardFonts, decodePDFRawStream, rgb } from "pdf-lib";
 import { strToU8, zipSync } from "fflate";
 import { createClient } from "@/lib/supabase/client";
 import type { BonusType, UploadedBonusResource } from "@/lib/bonus";
@@ -10,12 +10,424 @@ import type { PhaseDailyQuest, PhaseQuestProgress } from "@/lib/phase-quests";
 import type { UserDailyQuest } from "@/lib/user-daily-quests";
 
 type Gender = "woman" | "man";
+type Language = "en" | "id";
 type LeaderboardPeriod = "daily" | "weekly" | "phase";
 type Leader = { handle: string; title: string; avatar: string; daily: number; weekly: number; phase: number };
 type BonusResource = { title: string; category: string; description: string; detail: string; image: string; rows?: string[][] };
 type ProfileDialog = "edit" | "reset" | "certificate" | "feedback" | "logout" | null;
 type CompletionDialog = "evaluation" | "certificate" | null;
 type ProfileTheme = "dark" | "light";
+type SoftSkillAssessment = {
+  skillCategoryId: string;
+  softSkills: string;
+  earnedCoin: number;
+  maxPossibleCoin: number;
+};
+const certificateSkillOrder = [
+  { skillCategoryId: "SKILL_01", softSkills: "Self-Awareness, Emotional Regulation, & Personal Accountability" },
+  { skillCategoryId: "SKILL_02", softSkills: "System Thinking, Discipline, & Operational Efficiency" },
+  { skillCategoryId: "SKILL_03", softSkills: "Focus Mastery, Task Initiation, & Time Management" },
+  { skillCategoryId: "SKILL_04", softSkills: "Resilience, Cognitive Flexibility, & Emotional Boundaries" },
+  { skillCategoryId: "SKILL_05", softSkills: "Growth Mindset, Risk Appetite, & Decision-Making" },
+  { skillCategoryId: "SKILL_06", softSkills: "Strategic Planning, Sustainability, & Self-Governance" },
+] as const;
+type ProcessedChallengeLives = {
+  lives: number;
+  life_reset: boolean;
+  start_date: string;
+  last_evaluated_day: number;
+  lives_purchased: number;
+  coin_balance: number;
+};
+
+const indonesianTranslations: Record<string, string> = {
+  "Main navigation": "Navigasi utama",
+  "Leaderboard": "Papan peringkat",
+  "Challenge": "Tantangan",
+  "Bonus": "Bonus",
+  "Language": "Bahasa",
+  "Profile": "Profil",
+  "Back to journey": "Kembali ke perjalanan",
+  "Today": "Hari ini",
+  "XP": "XP",
+  "coin": "koin",
+  "pages": "halaman",
+  "minutes": "menit",
+  "reps": "repetisi",
+  "glasses": "gelas",
+  "times": "kali",
+  "e.g. Run 5 km, read 10 pages...": "cth. Lari 5 km, baca 10 halaman...",
+  "Saving challenge...": "Menyimpan tantangan...",
+  "MAKE IT YOURS": "JADIKAN SESUAI DIRI ANDA",
+  "Edit your profile.": "Edit profil Anda.",
+  "Choose the name you want to see on your journey.": "Pilih nama yang ingin ditampilkan dalam perjalanan Anda.",
+  "Display name": "Nama tampilan",
+  "Save profile": "Simpan profil",
+  "A FRESH ORBIT": "AWAL YANG BARU",
+  "Reset your journey?": "Atur ulang perjalanan Anda?",
+  "This clears your saved challenges, stardust, and preferences on this device. This can’t be undone.": "Tindakan ini menghapus tantangan, koin, dan preferensi tersimpan di perangkat ini. Tindakan ini tidak dapat dibatalkan.",
+  "Keep my progress": "Pertahankan progres",
+  "Reset everything": "Atur ulang semuanya",
+  "YOUR NEXT MILESTONE": "PENCAPAIAN BERIKUTNYA",
+  "Your 40-day orbit awaits.": "Perjalanan 40 hari Anda menanti.",
+  "Reach Day 40 and complete all your daily challenges to unlock your certificate.": "Capai Hari ke-40 dan selesaikan semua tantangan harian untuk membuka sertifikat.",
+  "Go to day 40": "Buka hari ke-40",
+  "HELP US GROW": "BANTU KAMI BERKEMBANG",
+  "Send a little feedback.": "Kirimkan masukan.",
+  "What could make your next orbit even better?": "Apa yang dapat membuat perjalanan Anda berikutnya lebih baik?",
+  "Your feedback": "Masukan Anda",
+  "Share an idea or tell us how it’s going...": "Bagikan ide atau ceritakan pengalaman Anda...",
+  "Send feedback": "Kirim masukan",
+  "YOUR ACCOUNT": "AKUN ANDA",
+  "Ready to head out?": "Yakin ingin keluar?",
+  "You’ll be securely signed out. Your journey progress will stay saved on this device.": "Anda akan keluar dengan aman. Progres perjalanan tetap tersimpan di perangkat ini.",
+  "Log out": "Keluar",
+  "Close": "Tutup",
+  "YOUR JOURNEY, REFLECTED": "REFLEKSI PERJALANAN ANDA",
+  "40-day evaluation.": "Evaluasi 40 hari.",
+  "You made it to the final day and completed every challenge.": "Anda telah mencapai hari terakhir dan menyelesaikan semua tantangan.",
+  "Download couldn’t be created. Please try again.": "Unduhan gagal dibuat. Silakan coba lagi.",
+  "Progress ": "Progres ",
+  "in orbit.": "perjalanan.",
+  "YOUR 40-DAY CHALLENGE": "TANTANGAN 40 HARI ANDA",
+  "Your current phase": "Fase Anda saat ini",
+  "Your rank": "Peringkat Anda",
+  "Daily leaderboard": "Papan peringkat harian",
+  "Target amount": "Jumlah target",
+  "Target unit": "Satuan target",
+  "Custom target unit": "Satuan target kustom",
+  "Enter your unit (e.g. chapters)": "Masukkan satuan (cth. bab)",
+  "Back to challenges": "Kembali ke tantangan",
+  "APP GUIDE": "PANDUAN APLIKASI",
+  "How to Use": "Cara Menggunakan",
+  "Points Explained": "Penjelasan Poin",
+  "SUPPORT": "DUKUNGAN",
+  "Customer Service": "Layanan Pelanggan",
+  "Feedback": "Masukan",
+  "Log Out": "Keluar",
+  "DOWNLOAD PDF": "UNDUH PDF",
+  "DOWNLOAD XLSX": "UNDUH XLSX",
+  "PDF · Google Drive": "PDF · Google Drive",
+  "Excel · Google Drive": "Excel · Google Drive",
+  "Your 40-day evaluation results": "Hasil evaluasi 40 hari",
+  "benchmark": "pembanding",
+  "Your daily leaderboard": "Papan peringkat harian Anda",
+  "Daily stardust progress over 40 challenge days": "Progres koin harian selama 40 hari tantangan",
+  "Your recorded daily stardust is shown with a cyan line. Gold, pink, and purple horizontal lines show current daily benchmark scores for the top three leaderboard players.": "Koin harian tercatat ditampilkan dengan garis sian. Garis emas, merah muda, dan ungu menunjukkan skor harian saat ini dari tiga peringkat teratas.",
+  "Daily stardust": "Koin harian",
+  "daily leaderboard": "papan peringkat harian",
+  "Opening your orbit...": "Membuka perjalanan Anda...",
+  "Your journey overview": "Ringkasan perjalanan Anda",
+  "YOUR NEXT CHAPTER STARTS HERE": "BAB BARU ANDA DIMULAI DI SINI",
+  "Become who": "Jadilah diri yang",
+  "you came here to be.": "Anda impikan.",
+  "Forty days. A few small promises. A whole new orbit.": "Empat puluh hari. Beberapa komitmen kecil. Perjalanan baru yang bermakna.",
+  "Continue your journey": "Lanjutkan perjalanan",
+  "DAILY LEADERBOARD": "PAPAN PERINGKAT HARIAN",
+  "YOUR RANK": "PERINGKAT ANDA",
+  "YOUR CURRENT PHASE": "FASE ANDA SAAT INI",
+  "Phase 01": "Fase 01",
+  "Awakening": "Awal Kesadaran",
+  "Every journey begins with a spark.": "Setiap perjalanan dimulai dari sebuah langkah kecil.",
+  "TOTAL COIN": "TOTAL KOIN",
+  "TOTAL LIVES": "TOTAL NYAWA",
+  "No completed challenge in a day costs 1 life. At 0, 250 coins automatically restore 1 life; without enough coins, your challenge data resets.": "Tidak menyelesaikan tantangan dalam sehari mengurangi 1 nyawa. Saat nyawa habis, 250 koin otomatis ditukar dengan 1 nyawa; jika koin tidak cukup, data tantangan akan diatur ulang.",
+  "CHALLENGE START": "TANTANGAN DIMULAI",
+  "Change challenge start date, currently": "Ubah tanggal mulai tantangan, saat ini",
+  "THE 40-DAY CHALLENGE": "TANTANGAN 40 HARI",
+  "Your map to ": "Panduan menuju ",
+  "more you.": "versi terbaik diri Anda.",
+  "Select a challenge day": "Pilih hari tantangan",
+  ", selected": ", dipilih",
+  "TODAY": "HARI INI",
+  "COMPLETE": "SELESAI",
+  "One day at a time. You’re right on track.": "Jalani satu hari demi satu hari. Anda berada di jalur yang tepat.",
+  "YOUR DAILY CHALLENGE": "TANTANGAN HARIAN ANDA",
+  "DAY ": "HARI ",
+  "Focus information is not available for this day.": "Informasi fokus belum tersedia untuk hari ini.",
+  "CHALLENGES DONE": "TANTANGAN SELESAI",
+  "Add a challenge": "Tambah tantangan",
+  "Add challenge": "Tambah tantangan",
+  "Edit challenge": "Edit tantangan",
+  "COIN": "KOIN",
+  "YOUR CHALLENGE": "TANTANGAN ANDA",
+  "BODY · MOVEMENT": "TUBUH · GERAK",
+  "MIND · LEARNING": "PIKIRAN · BELAJAR",
+  "SOUL · REFLECTION": "JIWA · REFLEKSI",
+  "Complete ✓": "Selesai ✓",
+  "Save progress": "Simpan progres",
+  "Save your achievement here, then complete the challenge to receive coins. Reaching the target adds +10 bonus coins; completing without saved progress counts as reaching it.": "Simpan pencapaian Anda di sini, lalu selesaikan tantangan untuk mendapatkan koin. Mencapai target memberi bonus +10 koin; jika progres tidak diisi, penyelesaian dianggap mencapai target.",
+  "Your progress": "Progres Anda",
+  "Reach the target for +10 bonus coins when you complete this challenge.": "Capai target untuk mendapat bonus +10 koin saat menyelesaikan tantangan.",
+  "Progress amount for ": "Jumlah progres untuk ",
+  "Saving...": "Menyimpan...",
+  "Mark incomplete": "Tandai belum selesai",
+  "Completed": "Selesai",
+  "Complete challenge": "Selesaikan tantangan",
+  "40-day challenge completion": "Penyelesaian tantangan 40 hari",
+  "Complete all daily challenges to unlock these actions.": "Selesaikan semua tantangan harian untuk membuka fitur ini.",
+  "Complete at least one challenge on each of the 40 days to unlock these actions.": "Selesaikan minimal satu tantangan pada setiap hari selama 40 hari untuk membuka fitur ini.",
+  "View your 40-day evaluation results": "Lihat hasil evaluasi 40 hari",
+  "Complete all challenges to unlock": "Selesaikan semua tantangan untuk membuka",
+  "40-Day Evaluation Results": "Hasil Evaluasi 40 Hari",
+  "Claim your completion certificate": "Klaim sertifikat penyelesaian",
+  "Certificate Claimed": "Sertifikat Diklaim",
+  "Claim Certificate": "Klaim Sertifikat",
+  "Made for your becoming": "Dibuat untuk perkembangan Anda",
+  "Back to the stars ↑": "Kembali ke atas ↑",
+  "Create Task": "Buat Tantangan",
+  "Back to challenge": "Kembali ke tantangan",
+  "Task name": "Nama tantangan",
+  "Short description": "Deskripsi singkat",
+  "What do you want to achieve?": "Apa yang ingin Anda capai?",
+  "Start date": "Hari mulai",
+  "End date": "Hari berakhir",
+  "Day ": "Hari ",
+  " · selected": " · dipilih",
+  "Frequency": "Frekuensi",
+  "One-Time": "Satu kali",
+  "Daily": "Harian",
+  "Weekly": "Mingguan",
+  "Level": "Tingkat",
+  "Easy": "Mudah",
+  "Medium": "Menengah",
+  "Hard": "Sulit",
+  "Total coin": "Total koin",
+  "Set automatically from the selected level": "Ditentukan otomatis berdasarkan tingkat",
+  "Target (optional)": "Target (opsional)",
+  "Amount...": "Jumlah...",
+  "Custom / Manual": "Kustom / Manual",
+  "Complete with the target achieved for +10 bonus coins. Without a target, completion awards the level coin only.": "Capai target untuk mendapat bonus +10 koin. Tanpa target, penyelesaian hanya memberi koin sesuai tingkat.",
+  "Back": "Kembali",
+  "Save challenge": "Simpan tantangan",
+  "Progress": "Progres",
+  "Delete challenge": "Hapus tantangan",
+  "Delete this challenge?": "Hapus tantangan ini?",
+  "This removes the challenge and its progress from your journey.": "Tantangan beserta progresnya akan dihapus dari perjalanan Anda.",
+  "Keep challenge": "Pertahankan tantangan",
+  "Update": "Perbarui",
+  "Description": "Deskripsi",
+  "Automatically set by level; target achievement adds +10 on completion.": "Diatur otomatis berdasarkan tingkat; target tercapai memberi bonus +10 saat selesai.",
+  "Achievement": "Pencapaian",
+  "Achievement amount": "Jumlah pencapaian",
+  "Achievement unit": "Satuan pencapaian",
+  "Pages": "Halaman",
+  "Minutes": "Menit",
+  "Reps": "Repetisi",
+  "Glasses": "Gelas",
+  "Times": "Kali",
+  "Custom": "Kustom",
+  "Enter custom unit": "Masukkan satuan kustom",
+  "Enter a target amount and unit for this challenge.": "Masukkan jumlah target dan satuannya untuk tantangan ini.",
+  "Profile avatar": "Avatar profil",
+  "YOUR COSMIC JOURNEY": "PERJALANAN ANDA",
+  "Edit profile": "Edit profil",
+  "challenges": "tantangan",
+  "stardust": "koin",
+  "PREFERENCES": "PREFERENSI",
+  "Appearance": "Tampilan",
+  "Appearance theme": "Tema tampilan",
+  "Dark": "Gelap",
+  "Light": "Terang",
+  "ACHIEVEMENTS": "PENCAPAIAN",
+  "CLAIMED": "DIKLAIM",
+  "COMPLETE 40 DAYS": "SELESAIKAN 40 HARI",
+  "AVAILABLE ON DAY 40": "TERSEDIA PADA HARI KE-40",
+  "DATA": "DATA",
+  "Reset Data": "Atur Ulang Data",
+  "Clear your progress and start again from day one.": "Hapus progres dan mulai kembali dari hari pertama.",
+  "Download ": "Unduh ",
+  "YOUR COSMIC TOOLKIT": "PERLENGKAPAN ANDA",
+  "Helpful little tools for the person you’re becoming.": "Berbagai alat bantu untuk mendukung perkembangan diri Anda.",
+  "Manage bonuses": "Kelola bonus",
+  "Close search": "Tutup pencarian",
+  "Search bonuses": "Cari bonus",
+  "Search guides and trackers...": "Cari panduan dan pelacak...",
+  "Search bonus resources": "Cari materi bonus",
+  "Bonus resource type": "Jenis materi bonus",
+  "E-book downloads": "Unduhan e-book",
+  "Tracker downloads": "Unduhan pelacak",
+  "E-BOOK": "E-BOOK",
+  "TRACKER": "PELACAK",
+  "DOWNLOAD ": "UNDUH ",
+  "EXCEL": "EXCEL",
+  "No resources found in this orbit.": "Materi tidak ditemukan.",
+  "Try a different title or category.": "Coba judul atau kategori lain.",
+  "Clear search": "Hapus pencarian",
+  "Back to your journey ↑": "Kembali ke perjalanan ↑",
+  "THE COSMIC COMMUNITY": "KOMUNITAS JOolo",
+  "SCORE": "SKOR",
+  "Find your ": "Temukan ",
+  "orbit.": "lingkaran Anda.",
+  "Every small step deserves a little stardust.": "Setiap langkah kecil layak dirayakan.",
+  "Leaderboard period": "Periode papan peringkat",
+  "daily": "harian",
+  "weekly": "mingguan",
+  "phase": "fase",
+  "40-day progress dashboard": "Dasbor progres 40 hari",
+  "YOUR 40-DAY JOURNEY": "PERJALANAN 40 HARI ANDA",
+  "Progress in orbit.": "Progres perjalanan.",
+  "Track your daily stardust and compare it with today’s Daily leaderboard leaders.": "Pantau koin harian Anda dan bandingkan dengan peringkat teratas hari ini.",
+  "STARDUST EARNED": "KOIN TERKUMPUL",
+  "DAILY STARDUST": "KOIN HARIAN",
+  "Day-by-day progress": "Progres hari demi hari",
+  "STARDUST / DAY": "KOIN / HARI",
+  "Chart lines": "Garis grafik",
+  "You · daily stardust": "Anda · koin harian",
+  "Your line records stardust from challenges you complete from now on; unrecorded days are left blank. Leader lines are today’s Daily scores used as comparison benchmarks, not historical records.": "Garis Anda mencatat koin dari tantangan yang diselesaikan mulai sekarang; hari tanpa catatan dibiarkan kosong. Garis peringkat menunjukkan skor harian saat ini sebagai pembanding, bukan riwayat.",
+  "Top three players": "Tiga pemain teratas",
+  "Leaderboard ranks": "Peringkat",
+  "Your cosmic journey": "Perjalanan Anda",
+  "PREVIOUS": "SEBELUMNYA",
+  "PAGE ": "HALAMAN ",
+  "NEXT": "BERIKUTNYA",
+  "BACK TO CHALLENGES": "KEMBALI KE TANTANGAN",
+  "Close date picker": "Tutup pemilih tanggal",
+  "Input your challenge start date.": "Masukkan tanggal mulai tantangan.",
+  "This date is saved to your Supabase account and marks the first day of your 40-day challenge.": "Tanggal ini tersimpan di akun Supabase dan menandai hari pertama tantangan 40 hari Anda.",
+  "CHALLENGE START DATE": "TANGGAL MULAI TANTANGAN",
+  "Cancel": "Batal",
+  "Save start date": "Simpan tanggal mulai",
+  "40-day evaluation results": "Hasil evaluasi 40 hari",
+  "YOUR 40-DAY EVALUATION": "EVALUASI 40 HARI ANDA",
+  "CHALLENGES COMPLETED": "TANTANGAN SELESAI",
+  "JOURNEY": "PERJALANAN",
+  "40 days": "40 hari",
+  "Celebrate your progress": "Rayakan progres Anda",
+  "A MILESTONE WORTH CELEBRATING": "PENCAPAIAN YANG PATUT DIRAYAKAN",
+  "JOOLO · CERTIFICATE OF COMPLETION": "JOOLO · SERTIFIKAT PENYELESAIAN",
+  "Certificate claimed!": "Sertifikat berhasil diklaim!",
+  "Congratulations!": "Selamat!",
+  "This recognizes ": "Sertifikat ini diberikan kepada ",
+  " for completing the 40-day cosmic growth challenge.": " atas keberhasilan menyelesaikan tantangan pengembangan diri 40 hari.",
+  " DAYS · ": " HARI · ",
+  " CHALLENGES COMPLETE": " TANTANGAN SELESAI",
+  "Your milestone is saved in your journey on this device.": "Pencapaian Anda tersimpan di perangkat ini.",
+  "Your 40-day journey is complete. This certificate has been added to your milestones.": "Perjalanan 40 hari Anda selesai. Sertifikat ini telah ditambahkan ke pencapaian Anda.",
+  "JOolo home": "Beranda JOolo",
+  "PHASE 1": "FASE 1",
+  "Choose a day on your 40-day map, complete a small daily challenge, and collect stardust as you build consistency. Your progress is saved on this device.": "Pilih hari pada peta 40 hari, selesaikan tantangan harian kecil, dan kumpulkan koin sambil membangun konsistensi. Progres Anda tersimpan di perangkat ini.",
+  "Each completed challenge earns the stardust shown on its card. Your balance appears here and on your journey dashboard.": "Setiap tantangan yang diselesaikan memberi koin sesuai jumlah pada kartunya. Saldo Anda ditampilkan di sini dan pada dasbor perjalanan.",
+  "Challenge progress saved.": "Progres tantangan berhasil disimpan.",
+  "Challenge progress updated.": "Progres tantangan berhasil diperbarui.",
+  "Challenge removed.": "Tantangan berhasil dihapus.",
+  "Custom challenge updated.": "Tantangan kustom berhasil diperbarui.",
+  "Custom challenge removed.": "Tantangan kustom berhasil dihapus.",
+  "Your journey data has been reset.": "Data perjalanan Anda berhasil diatur ulang.",
+  "Challenge start date saved to your account.": "Tanggal mulai tantangan berhasil disimpan ke akun Anda.",
+  "Profile updated.": "Profil berhasil diperbarui.",
+  "Thanks for helping JOolo grow!": "Terima kasih telah membantu JOolo berkembang!",
+  "Certificate could not be generated. Please try again.": "Sertifikat gagal dibuat. Silakan coba lagi.",
+  "COMPLETION CERTIFICATE": "SERTIFIKAT PENYELESAIAN",
+  "THIS CERTIFICATE IS PROUDLY PRESENTED TO": "SERTIFIKAT INI DIBERIKAN KEPADA",
+  "for completing the JOolo 40-day challenge": "atas keberhasilan menyelesaikan tantangan JOolo 40 hari",
+  "40-DAY CHALLENGE · COMPLETED": "TANTANGAN 40 HARI · SELESAI",
+  "Issued": "Diterbitkan",
+  "SOFT SKILLS ASSESSMENT": "PENILAIAN SOFT SKILLS",
+  "Soft skills": "Soft skills",
+  "Earned coin": "Koin diperoleh",
+  "Max coin": "Koin maksimal",
+  "Percentage": "Persentase",
+  "OVERALL": "TOTAL",
+  "Formula: earned coin ÷ max possible coin × 100": "Rumus: koin diperoleh ÷ koin maksimal × 100",
+  "Page 2 of 2": "Halaman 2 dari 2",
+  "Claim certificate": "Klaim sertifikat",
+  "Download certificate again": "Unduh sertifikat lagi",
+  "Generating certificate...": "Membuat sertifikat...",
+  "40-day certificate": "Sertifikat 40 hari",
+  "All challenge data was reset because your lives ran out. Your challenge restarts today.": "Semua data tantangan diatur ulang karena nyawa Anda habis. Tantangan dimulai kembali hari ini.",
+  "Challenge progress could not be saved: daily challenge was not found.": "Progres tantangan gagal disimpan: tantangan harian tidak ditemukan.",
+  "Challenge progress could not be saved: Supabase returned an invalid progress record.": "Progres tantangan gagal disimpan: Supabase mengembalikan data progres yang tidak valid.",
+  "Your challenge progress could not be saved: Supabase returned an invalid record.": "Progres tantangan Anda gagal disimpan: Supabase mengembalikan data yang tidak valid.",
+  "Your custom challenge could not be updated: Supabase returned an invalid record.": "Tantangan kustom Anda gagal diperbarui: Supabase mengembalikan data yang tidak valid.",
+  "Your custom challenge could not be updated: Supabase returned no record.": "Tantangan kustom Anda gagal diperbarui: Supabase tidak mengembalikan data.",
+  "Your challenge could not be created: Supabase returned no record.": "Tantangan Anda gagal dibuat: Supabase tidak mengembalikan data.",
+  "Enter a valid progress amount of zero or more.": "Masukkan jumlah progres yang valid, yaitu nol atau lebih.",
+  "Enter a custom target unit.": "Masukkan satuan target kustom.",
+  "Custom challenge completed.": "Tantangan kustom selesai.",
+  "Custom challenge marked incomplete.": "Tantangan kustom ditandai belum selesai.",
+  "Unexpected error.": "Terjadi kesalahan yang tidak terduga.",
+  "PHASE 01": "FASE 01",
+  "The 40-Day Blueprint": "Panduan 40 Hari",
+  "A gentle, step-by-step guide to build better habits and become your next self.": "Panduan bertahap untuk membangun kebiasaan yang lebih baik dan menjadi versi terbaik diri Anda.",
+  "Morning, Made Meaningful": "Pagi yang Lebih Bermakna",
+  "Create a calmer, more intentional morning with rituals that actually stick.": "Ciptakan pagi yang lebih tenang dan terarah dengan rutinitas yang konsisten.",
+  "Mind Over Momentum": "Pikiran Mengatasi Hambatan",
+  "Find your way forward when motivation gets quiet and life gets loud.": "Temukan jalan ke depan saat motivasi meredup dan kehidupan terasa ramai.",
+  "Small Steps, Stronger Self": "Langkah Kecil, Diri Lebih Kuat",
+  "Simple movement plans to feel stronger, more energized, and at home in your body.": "Rencana gerak sederhana agar tubuh terasa lebih kuat, berenergi, dan nyaman.",
+  "40-Day Habit Tracker": "Pelacak Kebiasaan 40 Hari",
+  "Track your daily rituals and celebrate every streak across your 40-day challenge.": "Pantau rutinitas harian dan rayakan setiap rangkaian konsistensi selama tantangan 40 hari.",
+  "Weekly Movement Log": "Catatan Gerak Mingguan",
+  "Record your workouts, movement minutes, and energy levels each week.": "Catat latihan, durasi aktivitas, dan tingkat energi Anda setiap minggu.",
+  "Study & Focus Planner": "Perencana Belajar dan Fokus",
+  "Plan your learning sessions, focus blocks, and small wins for the week.": "Rencanakan sesi belajar, waktu fokus, dan pencapaian kecil Anda setiap minggu.",
+  "Mindful Spending Tracker": "Pelacak Pengeluaran Sadar",
+  "Bring intention to spending, saving, and the goals that matter to you.": "Kelola pengeluaran, tabungan, dan tujuan yang penting bagi Anda dengan lebih terarah.",
+  "Printable guide  |  PDF": "Panduan cetak  |  PDF",
+  "40-day planner  |  XLSX": "Perencana 40 hari  |  XLSX",
+  "Weekly planner  |  XLSX": "Perencana mingguan  |  XLSX",
+  "Focus": "Fokus",
+  "Productivity": "Produktivitas",
+  "Mindset": "Pola pikir",
+  "Fitness": "Kebugaran",
+  "Habit": "Kebiasaan",
+  "Study": "Belajar",
+  "Finance": "Keuangan",
+  "Moon gardener": "Perawat kebun bulan",
+  "Word constellation": "Konstelasi kata",
+  "Moving meteor": "Meteor yang bergerak",
+  "Dawn seeker": "Pencari fajar",
+  "Inner galaxy": "Galaksi batin",
+  "New horizon": "Cakrawala baru",
+};
+
+function translate(text: string, language: Language) {
+  if (language !== "id") return text;
+  const exactTranslation = indonesianTranslations[text];
+  if (exactTranslation) return exactTranslation;
+
+  const dynamicTranslations: Array<[RegExp, (match: RegExpMatchArray) => string]> = [
+    [/^(\d+) coins were automatically exchanged for (\d+) lives?\.$/, (match) => `${match[1]} koin otomatis ditukar dengan ${match[2]} nyawa.`],
+    [/^Challenge added for Day (\d+)–(\d+)\.$/, (match) => `Tantangan ditambahkan untuk Hari ${match[1]}–${match[2]}.`],
+    [/^Your journey is now personalized for (women|men)\.$/, (match) => `Preferensi perjalanan Anda disesuaikan untuk ${match[1] === "women" ? "wanita" : "pria"}.`],
+    [/^(.+) is ready to download\.$/, (match) => `${match[1]} siap diunduh.`],
+  ];
+  for (const [pattern, format] of dynamicTranslations) {
+    const match = text.match(pattern);
+    if (match) return format(match);
+  }
+
+  const errorPrefixes: Array<[string, string]> = [
+    ["Challenge lives could not be updated: ", "Nyawa tantangan gagal diperbarui: "],
+    ["Challenge progress could not be saved: ", "Progres tantangan gagal disimpan: "],
+    ["Your challenge progress could not be saved: ", "Progres tantangan Anda gagal disimpan: "],
+    ["Your custom challenge could not be updated: ", "Tantangan kustom Anda gagal diperbarui: "],
+    ["Your custom challenge could not be deleted: ", "Tantangan kustom Anda gagal dihapus: "],
+    ["Your challenge could not be created: ", "Tantangan Anda gagal dibuat: "],
+    ["Your saved phase challenge progress could not be reset: ", "Progres tantangan fase tersimpan gagal diatur ulang: "],
+    ["Challenge progress was reset, but your coin balance could not be refreshed: ", "Progres tantangan diatur ulang, tetapi saldo koin gagal diperbarui: "],
+    ["Your daily challenge progress could not be saved: ", "Progres tantangan harian Anda gagal disimpan: "],
+    ["Certificate could not be generated: ", "Sertifikat gagal dibuat: "],
+  ];
+  const errorPrefix = errorPrefixes.find(([prefix]) => text.startsWith(prefix));
+  return errorPrefix ? `${errorPrefix[1]}${text.slice(errorPrefix[0].length)}` : text;
+}
+
+function isProcessedChallengeLives(value: unknown): value is ProcessedChallengeLives {
+  if (!value || typeof value !== "object") return false;
+  const result = value as Record<string, unknown>;
+  return Number.isInteger(result.lives)
+    && Number(result.lives) >= 0
+    && Number(result.lives) <= 7
+    && typeof result.life_reset === "boolean"
+    && typeof result.start_date === "string"
+    && Number.isInteger(result.last_evaluated_day)
+    && Number.isInteger(result.lives_purchased)
+    && Number(result.lives_purchased) >= 0
+    && Number.isInteger(result.coin_balance)
+    && Number(result.coin_balance) >= 0;
+}
 type Challenge = {
   id: string;
   title: string;
@@ -47,6 +459,14 @@ function getPhaseQuestGoal(target: string) {
 
 function formatProgressAmount(amount: number) {
   return amount.toLocaleString("en-US", { maximumFractionDigits: 2 });
+}
+
+function getCurrentChallengeDay(startDate: string) {
+  const [year, month, day] = startDate.split("-").map(Number);
+  const today = new Date();
+  const todayUtc = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+  const startUtc = Date.UTC(year, month - 1, day);
+  return Math.min(40, Math.max(1, Math.floor((todayUtc - startUtc) / 86_400_000) + 1));
 }
 
 function getUserDailyQuestReward(quest: Pick<UserDailyQuest, "level" | "target_amount">) {
@@ -114,12 +534,6 @@ const initialChallenges: Challenge[] = [
   },
 ];
 
-const quotes = [
-  "Every moment is a fresh beginning.",
-  "Small steps every day add up to big change.",
-  "You are allowed to be a work in progress.",
-];
-
 const leaderboard: Leader[] = [
   { handle: "@diana.love", title: "Nebula seeker", avatar: "photo-1534528741775-53994a69daeb", daily: 920, weekly: 8805, phase: 18920 },
   { handle: "@john_life", title: "Orbit explorer", avatar: "photo-1500648767791-00dcc994a43e", daily: 870, weekly: 8239, phase: 17640 },
@@ -148,7 +562,7 @@ const bonusResources: Record<BonusType, BonusResource[]> = {
     { title: "Small Steps, Stronger Self", category: "Fitness", description: "Simple movement plans to feel stronger, more energized, and at home in your body.", detail: "Printable guide  |  PDF", image: "photo-1518611012118-696072aa579a" },
   ],
   tracker: [
-    { title: "40-Day Habit Tracker", category: "Habit", description: "Track your daily rituals and celebrate every streak across your 40-day quest.", detail: "40-day planner  |  XLSX", image: "photo-1454165804606-c3d57bc86b40", rows: [["Day", "Morning ritual", "Move your body", "Read 10 pages", "Gratitude note", "Notes"]] },
+    { title: "40-Day Habit Tracker", category: "Habit", description: "Track your daily rituals and celebrate every streak across your 40-day challenge.", detail: "40-day planner  |  XLSX", image: "photo-1454165804606-c3d57bc86b40", rows: [["Day", "Morning ritual", "Move your body", "Read 10 pages", "Gratitude note", "Notes"]] },
     { title: "Weekly Movement Log", category: "Fitness", description: "Record your workouts, movement minutes, and energy levels each week.", detail: "Weekly planner  |  XLSX", image: "photo-1461896836934-ffe607ba8211", rows: [["Day", "Activity", "Minutes", "Energy (1-5)", "Notes"]] },
     { title: "Study & Focus Planner", category: "Study", description: "Plan your learning sessions, focus blocks, and small wins for the week.", detail: "Weekly planner  |  XLSX", image: "photo-1456324504439-367cee3b3c32", rows: [["Date", "Subject", "Focus goal", "Minutes", "Completed", "Reflection"]] },
     { title: "Mindful Spending Tracker", category: "Finance", description: "Bring intention to spending, saving, and the goals that matter to you.", detail: "Spending planner  |  XLSX", image: "photo-1460925895917-afdab827c52f", rows: [["Date", "Category", "Description", "Amount", "Need or want", "Notes"]] },
@@ -205,6 +619,8 @@ export default function DashboardClient({
   isAdmin,
   uploadedResources,
   initialStartDate,
+  initialLives,
+  initialCoins,
   phaseDailyQuests,
   phaseQuestProgress: initialPhaseQuestProgress,
   userDailyQuests: initialUserDailyQuests,
@@ -215,6 +631,8 @@ export default function DashboardClient({
   isAdmin: boolean;
   uploadedResources: UploadedBonusResource[];
   initialStartDate: string;
+  initialLives: number;
+  initialCoins: number;
   phaseDailyQuests: PhaseDailyQuest[];
   phaseQuestProgress: PhaseQuestProgress[];
   userDailyQuests: UserDailyQuest[];
@@ -224,6 +642,7 @@ export default function DashboardClient({
   const [challenges, setChallenges] = useState<Challenge[]>(initialChallenges);
   const [selectedDay, setSelectedDay] = useState(1);
   const [journeyStartDate, setJourneyStartDate] = useState(initialStartDate);
+  const [lives, setLives] = useState(initialLives);
   const [dailyStardustByDay, setDailyStardustByDay] = useState<Record<string, number>>({});
   const [challengeCompletionDays, setChallengeCompletionDays] = useState<Record<string, number>>({});
   const [journeyStartDateDraft, setJourneyStartDateDraft] = useState(initialStartDate);
@@ -241,7 +660,7 @@ export default function DashboardClient({
   const [userDailyQuests, setUserDailyQuests] = useState(initialUserDailyQuests);
   const [pendingUserDailyQuestIds, setPendingUserDailyQuestIds] = useState<string[]>([]);
   const [userQuestProgressDrafts, setUserQuestProgressDrafts] = useState<Record<string, string>>({});
-  const [coins, setCoins] = useState(267);
+  const [coins, setCoins] = useState(initialCoins);
   const [modalOpen, setModalOpen] = useState(false);
   const [taskSaving, setTaskSaving] = useState(false);
   const [taskSchedule, setTaskSchedule] = useState<"one-time" | "daily" | "weekly">("one-time");
@@ -266,6 +685,7 @@ export default function DashboardClient({
   const [confirmChallengeDelete, setConfirmChallengeDelete] = useState(false);
   const [completionDialog, setCompletionDialog] = useState<CompletionDialog>(null);
   const [certificateClaimed, setCertificateClaimed] = useState(false);
+  const [certificateGenerating, setCertificateGenerating] = useState(false);
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
   const [bonusOpen, setBonusOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -278,21 +698,39 @@ export default function DashboardClient({
   const [bonusSearch, setBonusSearch] = useState("");
   const [leaderboardPeriod, setLeaderboardPeriod] = useState<LeaderboardPeriod>("weekly");
   const [leaderboardPage, setLeaderboardPage] = useState(0);
+  const [language, setLanguage] = useState<Language>("en");
   const [toast, setToast] = useState("");
   const [hydrated, setHydrated] = useState(false);
+  const livesProcessingRef = useRef(false);
+  const t = (text: string) => translate(text, language);
+  const languageSelector = (
+    <label className="language-selector">
+      <Icon name="globe" size={20} />
+      <select
+        aria-label={t("Language")}
+        value={language}
+        onChange={(event) => setLanguage(event.currentTarget.value as Language)}
+      >
+        <option value="en">English</option>
+        <option value="id">Indonesia</option>
+      </select>
+      <Icon name="chevron" size={14} />
+    </label>
+  );
 
   useEffect(() => {
     setGender(readStored<Gender>("joolo-gender", "woman", userId));
     setChallenges(readStored<Challenge[]>("joolo-challenges", initialChallenges, userId));
     setCertificateClaimed(readStored<boolean>("joolo-certificate-claimed", false, userId));
     setJourneyStartDate(initialStartDate);
+    setCoins(initialCoins);
     setDailyStardustByDay(readStored<Record<string, number>>("joolo-daily-stardust", {}, userId));
     setChallengeCompletionDays(readStored<Record<string, number>>("joolo-challenge-completion-days", {}, userId));
-    setCoins(readStored<number>("joolo-coins", 267, userId));
     setProfileName(readStored<string>("joolo-profile-name", name, userId));
     setProfileTheme(readStored<ProfileTheme>("joolo-profile-theme", "dark", userId));
+    setLanguage(readStored<Language>("joolo-language", "en", userId));
     setHydrated(true);
-  }, [userId, name, initialStartDate]);
+  }, [userId, name, initialStartDate, initialCoins]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -301,10 +739,68 @@ export default function DashboardClient({
     localStorage.setItem(`${userId}:joolo-certificate-claimed`, JSON.stringify(certificateClaimed));
     localStorage.setItem(`${userId}:joolo-daily-stardust`, JSON.stringify(dailyStardustByDay));
     localStorage.setItem(`${userId}:joolo-challenge-completion-days`, JSON.stringify(challengeCompletionDays));
-    localStorage.setItem(`${userId}:joolo-coins`, JSON.stringify(coins));
     localStorage.setItem(`${userId}:joolo-profile-name`, JSON.stringify(profileName));
     localStorage.setItem(`${userId}:joolo-profile-theme`, JSON.stringify(profileTheme));
-  }, [gender, challenges, certificateClaimed, dailyStardustByDay, challengeCompletionDays, coins, profileName, profileTheme, hydrated, userId]);
+    localStorage.setItem(`${userId}:joolo-language`, JSON.stringify(language));
+  }, [gender, challenges, certificateClaimed, dailyStardustByDay, challengeCompletionDays, coins, profileName, profileTheme, language, hydrated, userId]);
+
+  useEffect(() => {
+    if (!hydrated || livesProcessingRef.current) return;
+    livesProcessingRef.current = true;
+
+    async function processLives() {
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase.rpc("process_challenge_lives", {
+          p_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+        });
+
+        if (error) {
+          throw new Error(error.message);
+        }
+
+        const result = Array.isArray(data) ? data[0] : data;
+        if (!isProcessedChallengeLives(result)) {
+          throw new Error("Supabase returned an invalid challenge lives state.");
+        }
+
+        setLives(result.lives);
+        setCoins(result.coin_balance);
+        if (result.life_reset) {
+          setJourneyStartDate(result.start_date);
+          setJourneyStartDateDraft(result.start_date);
+          setSelectedDay(1);
+          setPhaseQuestProgressById({});
+          setCompletedPhaseQuestIds([]);
+          setPhaseProgressDrafts({});
+          setUserDailyQuests([]);
+          setUserQuestProgressDrafts({});
+          setChallenges(initialChallenges);
+          setCertificateClaimed(false);
+          setDailyStardustByDay({});
+          setChallengeCompletionDays({});
+          [
+            "joolo-challenges",
+            "joolo-certificate-claimed",
+            "joolo-daily-stardust",
+            "joolo-challenge-completion-days",
+            "joolo-coins",
+          ].forEach((key) => localStorage.removeItem(`${userId}:${key}`));
+          notify("All challenge data was reset because your lives ran out. Your challenge restarts today.");
+          router.refresh();
+          return;
+        }
+
+        if (result.lives_purchased > 0) {
+          notify(`${result.lives_purchased * 250} coins were automatically exchanged for ${result.lives_purchased} ${result.lives_purchased === 1 ? "life" : "lives"}.`);
+        }
+      } catch (error) {
+        notify(`Challenge lives could not be updated: ${error instanceof Error ? error.message : "Unexpected error."}`);
+      }
+    }
+
+    void processLives();
+  }, [hydrated, router, userId]);
 
   const phaseQuestsForSelectedDay = phaseDailyQuests
     .filter((quest) => quest.day_number === selectedDay)
@@ -345,7 +841,7 @@ export default function DashboardClient({
         detail,
         reward: getUserDailyQuestReward(quest),
         accent: quest.level === "Easy" ? "cyan" : quest.level === "Medium" ? "pink" : "gold",
-        image: getTaskCover(quest.task_name, gender),
+        image: "",
         done: quest.is_completed,
         custom: true,
         schedule,
@@ -359,6 +855,7 @@ export default function DashboardClient({
       };
     });
   const selectedPhase = phaseDailyQuests.find((quest) => quest.day_number === selectedDay);
+  const currentPhase = phaseDailyQuests.find((quest) => quest.day_number === getCurrentChallengeDay(journeyStartDate)) ?? selectedPhase;
   const activeChallenges = phaseQuestsForSelectedDay.length > 0
     ? [...phaseQuestsForSelectedDay, ...userQuestsForSelectedDay, ...challenges.filter((challenge) => challenge.custom && (!challenge.dayNumber || challenge.dayNumber === selectedDay))]
     : [...challenges.filter((challenge) => !challenge.custom), ...userQuestsForSelectedDay, ...challenges.filter((challenge) => challenge.custom && (!challenge.dayNumber || challenge.dayNumber === selectedDay))];
@@ -369,15 +866,22 @@ export default function DashboardClient({
     year: "numeric",
   });
   const dayNumber = Math.max(selectedDay, 1);
-  const canClaimCertificate = dayNumber === 40 && activeChallenges.length > 0 && completed === activeChallenges.length;
-  const completedStardust = activeChallenges.reduce((total, challenge) => {
-    if (!challenge.done) return total;
-    return total + (challenge.phaseFocus
-      ? phaseQuestProgressById[challenge.id]?.earned_coin ?? challenge.reward
-      : challenge.reward);
-  }, 0);
+  const dailyLeaderboardRank = [...leaderboard]
+    .sort((first, second) => second.daily - first.daily)
+    .findIndex((leader) => leader.handle === "@you") + 1;
+  const completedPhaseDays = new Set(
+    phaseDailyQuests
+      .filter((quest) => completedPhaseQuestIds.includes(quest.id))
+      .map((quest) => quest.day_number),
+  );
+  const canClaimCertificate = Array.from({ length: 40 }, (_, index) => index + 1)
+    .every((day) => completedPhaseDays.has(day));
+  const completedPhaseQuests = phaseDailyQuests.filter((quest) => completedPhaseQuestIds.includes(quest.id));
+  const completedStardust = completedPhaseQuests.reduce(
+    (total, quest) => total + (phaseQuestProgressById[quest.id]?.earned_coin ?? quest.total_coin),
+    0,
+  );
   const progress = Math.round((completed / Math.max(activeChallenges.length, 1)) * 100);
-  const quote = useMemo(() => quotes[(dayNumber - 1) % quotes.length], [dayNumber]);
   const rankedLeaders = useMemo(
     () => [...leaderboard].sort((a, b) => b[leaderboardPeriod] - a[leaderboardPeriod]),
     [leaderboardPeriod],
@@ -416,16 +920,368 @@ export default function DashboardClient({
   );
   const taskReward = taskLevel === "Easy" ? 10 : taskLevel === "Medium" ? 20 : 30;
 
-  function notify(message: string) {
-    setToast(message);
-    window.setTimeout(() => setToast(""), 2600);
+  function notify(message: string, duration = 2600) {
+    setToast(t(message));
+    window.setTimeout(() => setToast(""), duration);
+  }
+
+  async function claimCompletionCertificate() {
+    if (!canClaimCertificate || certificateGenerating) return;
+    setCertificateGenerating(true);
+    try {
+      const supabase = createClient();
+      const { data: certificateData, error: certificateError } = await supabase.rpc("issue_40_day_certificate");
+      if (certificateError) throw new Error(`Could not issue certificate: ${certificateError.message}`);
+      const certificate = Array.isArray(certificateData) ? certificateData[0] : certificateData;
+      if (
+        !certificate
+        || typeof certificate.verification_code !== "string"
+        || !/^JOOLO\/40DC\/[IVX]+\/\d{4}\/\d{5,}$/.test(certificate.verification_code)
+        || typeof certificate.issued_at !== "string"
+        || !Number.isFinite(Date.parse(certificate.issued_at))
+      ) {
+        throw new Error("Supabase returned an invalid certificate verification record");
+      }
+
+      const templateResponse = await fetch("/certificates/joolo-40-day-template-clean.pdf");
+      if (!templateResponse.ok) {
+        throw new Error(`Could not load certificate design: HTTP ${templateResponse.status}`);
+      }
+      const document = await PDFDocument.load(new Uint8Array(await templateResponse.arrayBuffer()));
+      if (document.getPageCount() !== 2) {
+        throw new Error("The certificate design must contain exactly two pages");
+      }
+      const font = await document.embedFont(StandardFonts.Helvetica);
+      const boldFont = await document.embedFont(StandardFonts.HelveticaBold);
+      const nameFont = await document.embedFont(StandardFonts.TimesRomanItalic);
+      const certificatePage = document.getPage(0);
+      const assessmentPage = document.getPage(1);
+      const pageWidth = certificatePage.getWidth();
+      const darkBackground = rgb(9 / 255, 21 / 255, 34 / 255);
+      const cyan = rgb(0.36, 0.95, 0.89);
+      const gold = rgb(0.94, 0.79, 0.49);
+      const pdfText = (value: string) => value
+        .normalize("NFKD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replaceAll("÷", "/")
+        .replaceAll("×", "x")
+        .replaceAll("·", "-")
+        .replaceAll("–", "-")
+        .replace(/[^\x20-\x7E]/g, " ");
+      const issuedAt = new Date(certificate.issued_at);
+      const issuedDate = issuedAt.toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+        timeZone: "Asia/Jakarta",
+      }).toLocaleUpperCase("id-ID");
+      const verificationCode = certificate.verification_code;
+      const name = profileName.trim() || email || "JOolo member";
+      const safeName = pdfText(name);
+      const nameFontSize = Math.min(42, 345 / nameFont.widthOfTextAtSize(safeName, 42) * 42);
+      certificatePage.drawRectangle({ x: 323, y: 337, width: 196, height: 53, color: darkBackground });
+      certificatePage.drawText(safeName, {
+        x: (pageWidth - nameFont.widthOfTextAtSize(safeName, nameFontSize)) / 2,
+        y: 347,
+        size: nameFontSize,
+        font: nameFont,
+        color: rgb(0.94, 0.96, 1),
+      });
+      const safeVerificationCode = pdfText(verificationCode);
+      const verificationCodeFontSize = Math.min(
+        10,
+        310 / boldFont.widthOfTextAtSize(safeVerificationCode, 10) * 10,
+      );
+      certificatePage.drawText(pdfText(verificationCode), {
+        x: 70,
+        y: 86,
+        size: verificationCodeFontSize,
+        font: boldFont,
+        color: rgb(0.76, 0.82, 0.9),
+      });
+      certificatePage.drawText(pdfText(`DITERBITKAN ${issuedDate}`), {
+        x: 70,
+        y: 60,
+        size: 10.5,
+        font: boldFont,
+        color: rgb(0.62, 0.69, 0.8),
+      });
+
+      const certificateSkillsById = new Map<string, (typeof certificateSkillOrder)[number]>(
+        certificateSkillOrder.map((skill) => [skill.skillCategoryId, skill] as const),
+      );
+      const assessmentsBySkill = new Map<string, SoftSkillAssessment>();
+      for (const quest of phaseDailyQuests) {
+        const configuredSkill = certificateSkillsById.get(quest.skill_category_id);
+        if (!configuredSkill) {
+          throw new Error(`The certificate template does not include skill category ${quest.skill_category_id}`);
+        }
+        const softSkills = quest.soft_skills.trim();
+        if (softSkills !== configuredSkill.softSkills) {
+          throw new Error(`Skill ${quest.skill_category_id} has an unexpected soft-skill name`);
+        }
+        const assessment = assessmentsBySkill.get(quest.skill_category_id) ?? {
+          skillCategoryId: quest.skill_category_id,
+          softSkills,
+          earnedCoin: 0,
+          maxPossibleCoin: 0,
+        };
+        if (assessment.softSkills !== softSkills) {
+          throw new Error(`Skill ${quest.skill_category_id} has inconsistent soft-skill names`);
+        }
+        const questProgress = phaseQuestProgressById[quest.id];
+        assessment.earnedCoin += questProgress?.completed_at ? questProgress.earned_coin : 0;
+        assessment.maxPossibleCoin += quest.max_possible_coin;
+        assessmentsBySkill.set(quest.skill_category_id, assessment);
+      }
+      if (assessmentsBySkill.size !== certificateSkillOrder.length) {
+        throw new Error("The certificate template requires all six configured soft-skill categories");
+      }
+      const assessments = certificateSkillOrder.map(({ skillCategoryId, softSkills }) => {
+        const assessment = assessmentsBySkill.get(skillCategoryId);
+        if (!assessment || assessment.softSkills !== softSkills) {
+          throw new Error(`The certificate template is missing configured category ${skillCategoryId}`);
+        }
+        return assessment;
+      });
+      const totals = assessments.reduce(
+        (total, assessment) => ({
+          earnedCoin: total.earnedCoin + assessment.earnedCoin,
+          maxPossibleCoin: total.maxPossibleCoin + assessment.maxPossibleCoin,
+        }),
+        { earnedCoin: 0, maxPossibleCoin: 0 },
+      );
+      const percentageValue = (earnedCoin: number, maxPossibleCoin: number) =>
+        maxPossibleCoin > 0 ? (earnedCoin / maxPossibleCoin) * 100 : 0;
+      const percentage = (earnedCoin: number, maxPossibleCoin: number) =>
+        `${percentageValue(earnedCoin, maxPossibleCoin).toFixed(1)}%`;
+
+      const contentStream = assessmentPage.node.Contents();
+      if (!(contentStream instanceof PDFRawStream)) {
+        throw new Error("The certificate assessment page has an unsupported PDF content layout");
+      }
+      const streamText = new TextDecoder().decode(decodePDFRawStream(contentStream).decode());
+      const skillLabelBaselines = [370.48, 330.73, 290.98, 258.54, 211.48, 171.73];
+      const skillLabelReplacements = assessments.map((assessment, index) => ({
+        y: skillLabelBaselines[index],
+        value: assessment.softSkills,
+      }));
+      skillLabelReplacements.push({ y: 243.91, value: "" });
+      const skillLabelReplacementCounts = new Map(
+        skillLabelReplacements.map((replacement) => [replacement, 0]),
+      );
+      const encodePdfText = (value: string) =>
+        Array.from(value, (character) => character.charCodeAt(0).toString(16).padStart(4, "0")).join("");
+      let updatedStreamText = streamText.replace(
+        /(1 0 0 1 120 ([\d.]+) Tm\s*)(?:<[\dA-Fa-f]*>\s*Tj|\[[\s\S]*?\]\s*TJ)/g,
+        (operator, prefix: string, yText: string) => {
+          const replacement = skillLabelReplacements.find((item) =>
+            Math.abs(item.y - Number(yText)) < 0.01,
+          );
+          if (!replacement) return operator;
+          skillLabelReplacementCounts.set(
+            replacement,
+            (skillLabelReplacementCounts.get(replacement) ?? 0) + 1,
+          );
+          return `${prefix}<${encodePdfText(replacement.value)}> Tj`;
+        },
+      );
+      if (skillLabelReplacements.some((replacement) => skillLabelReplacementCounts.get(replacement) !== 1)) {
+        throw new Error("The certificate template is missing one or more expected skill-name fields");
+      }
+
+      const maximumScoreBaselines = [370.48, 330.73, 290.98, 251.23, 211.48, 171.73];
+      const maximumScoreReplacementCounts = Array(assessments.length).fill(0);
+      updatedStreamText = updatedStreamText.replace(
+        /(\/F0 ([\d.]+) Tf\s*([\d.]+) Tz\s*1 0 0 1 )([\d.]+) ([\d.]+) Tm\s*<([\dA-Fa-f]+)>\s*Tj/g,
+        (
+          operator,
+          fontPrefix: string,
+          fontSizeText: string,
+          horizontalScaleText: string,
+          xText: string,
+          yText: string,
+          originalValueHex: string,
+        ) => {
+          const rowIndex = maximumScoreBaselines.findIndex((baseline) =>
+            Math.abs(baseline - Number(yText)) < 0.01,
+          );
+          if (rowIndex < 0) return operator;
+          const originalValue = originalValueHex.match(/.{4}/g)
+            ?.map((character) => String.fromCharCode(parseInt(character, 16)))
+            .join("");
+          if (!originalValue || !/^\d+$/.test(originalValue)) return operator;
+          maximumScoreReplacementCounts[rowIndex] += 1;
+          const fontSize = Number(fontSizeText);
+          const horizontalScale = Number(horizontalScaleText) / 100;
+          // The template's embedded font assigns every ASCII digit a width of 556 units.
+          const digitWidth = 556;
+          const rightEdge = Number(xText) + originalValue.length * digitWidth * fontSize * horizontalScale / 1000;
+          const value = String(assessments[rowIndex].maxPossibleCoin);
+          const x = rightEdge - value.length * digitWidth * fontSize * horizontalScale / 1000;
+          return `${fontPrefix}${x.toFixed(2)} ${yText} Tm\n<${encodePdfText(value)}> Tj`;
+        },
+      );
+      if (maximumScoreReplacementCounts.some((count) => count !== 1)) {
+        throw new Error("The certificate template is missing one or more maximum-score fields");
+      }
+
+      const pageTwoReplacements = [
+        { x: 501.82, y: 370.09, value: String(assessments[0].earnedCoin) },
+        { x: 501.82, y: 330.34, value: String(assessments[1].earnedCoin) },
+        { x: 501.82, y: 290.59, value: String(assessments[2].earnedCoin) },
+        { x: 500.64, y: 250.84, value: String(assessments[3].earnedCoin) },
+        { x: 496.61, y: 211.09, value: String(assessments[4].earnedCoin) },
+        { x: 501.33, y: 171.34, value: String(assessments[5].earnedCoin) },
+        { x: 741.9, y: 370.48, value: percentage(assessments[0].earnedCoin, assessments[0].maxPossibleCoin) },
+        { x: 741.9, y: 330.73, value: percentage(assessments[1].earnedCoin, assessments[1].maxPossibleCoin) },
+        { x: 741.9, y: 290.98, value: percentage(assessments[2].earnedCoin, assessments[2].maxPossibleCoin) },
+        { x: 741.9, y: 251.23, value: percentage(assessments[3].earnedCoin, assessments[3].maxPossibleCoin) },
+        { x: 741.9, y: 211.48, value: percentage(assessments[4].earnedCoin, assessments[4].maxPossibleCoin) },
+        { x: 741.9, y: 171.73, value: percentage(assessments[5].earnedCoin, assessments[5].maxPossibleCoin) },
+        { x: 487.64, y: 123.52, value: String(totals.earnedCoin) },
+        { x: 738.82, y: 124.09, value: percentage(totals.earnedCoin, totals.maxPossibleCoin) },
+        { x: 67.5, y: 58.46, value: `DITERBITKAN ${issuedDate}` },
+        { x: 374.95, y: 58.46, value: `ID: ${verificationCode}` },
+      ];
+      const replacementCounts = new Map(pageTwoReplacements.map((replacement) => [replacement, 0]));
+      const replacedStreamText = updatedStreamText.replace(
+        /1 0 0 1 ([\d.]+) ([\d.]+) Tm\s*<([0-9A-Fa-f]+)>\s*Tj/g,
+        (operator, xText: string, yText: string) => {
+          const x = Number(xText);
+          const y = Number(yText);
+          const replacement = pageTwoReplacements.find((item) =>
+            Math.abs(item.x - x) < 0.01 && Math.abs(item.y - y) < 0.01,
+          );
+          if (!replacement) return operator;
+          replacementCounts.set(replacement, (replacementCounts.get(replacement) ?? 0) + 1);
+          return operator.replace(/<([0-9A-Fa-f]+)>\s*Tj$/, "<> Tj");
+        },
+      );
+      if (pageTwoReplacements.some((replacement) => replacementCounts.get(replacement) !== 1)) {
+        throw new Error("The certificate template is missing one or more expected assessment text fields");
+      }
+      const updatedContentStream = document.context.flateStream(replacedStreamText);
+      assessmentPage.node.set(
+        PDFName.of("Contents"),
+        document.context.register(updatedContentStream),
+      );
+      const scoreColor = rgb(0.91, 0.94, 0.98);
+      const percentageColor = rgb(0.36, 0.95, 0.89);
+      const drawVisibleValue = (
+        centerX: number,
+        baseline: number,
+        value: string,
+        fontSize: number,
+        color: typeof percentageColor,
+      ) => {
+        const safeText = pdfText(value);
+        const textWidth = boldFont.widthOfTextAtSize(safeText, fontSize);
+        assessmentPage.drawText(safeText, {
+          x: centerX - textWidth / 2,
+          y: baseline,
+          size: fontSize,
+          font: boldFont,
+          color,
+        });
+      };
+      const drawProgressBar = (baseline: number, value: number) => {
+        const startX = 618.75;
+        const barWidth = 100.25;
+        const barHeight = 5.8;
+        const radius = barHeight / 2;
+        const fillWidth = barWidth * Math.min(100, Math.max(0, value)) / 100;
+        if (fillWidth <= 0) return;
+        const y = baseline - 0.05;
+        const capRadius = Math.min(radius, fillWidth / 2);
+        assessmentPage.drawCircle({
+          x: startX + capRadius,
+          y: y + radius,
+          size: capRadius,
+          color: percentageColor,
+        });
+        if (fillWidth > capRadius) {
+          assessmentPage.drawRectangle({
+            x: startX + capRadius,
+            y,
+            width: fillWidth - capRadius,
+            height: barHeight,
+            color: percentageColor,
+          });
+        }
+      };
+      const scoreCenters = [508.4, 508.4, 508.4, 507.22, 506.49, 507.91];
+      const scoreBaselines = [370.09, 330.34, 290.59, 250.84, 211.09, 171.34];
+      const percentageBaselines = [370.48, 330.73, 290.98, 251.23, 211.48, 171.73];
+      assessments.forEach((assessment, index) => {
+        drawVisibleValue(
+          scoreCenters[index],
+          scoreBaselines[index],
+          String(assessment.earnedCoin),
+          11.25,
+          scoreColor,
+        );
+        drawVisibleValue(
+          754.95,
+          percentageBaselines[index],
+          percentage(assessment.earnedCoin, assessment.maxPossibleCoin),
+          10.5,
+          percentageColor,
+        );
+        drawProgressBar(
+          percentageBaselines[index],
+          percentageValue(assessment.earnedCoin, assessment.maxPossibleCoin),
+        );
+      });
+      drawVisibleValue(502.2, 123.52, String(totals.earnedCoin), 15, scoreColor);
+      drawVisibleValue(
+        750.03,
+        124.09,
+        percentage(totals.earnedCoin, totals.maxPossibleCoin),
+        12.75,
+        percentageColor,
+      );
+      drawProgressBar(124.09, percentageValue(totals.earnedCoin, totals.maxPossibleCoin));
+      assessmentPage.drawText(pdfText(`DITERBITKAN ${issuedDate}`), {
+        x: 67.5,
+        y: 58.46,
+        size: 7.5,
+        font: boldFont,
+        color: rgb(0.62, 0.69, 0.8),
+      });
+      assessmentPage.drawText(pdfText(`ID: ${verificationCode}`), {
+        x: 374.95,
+        y: 58.46,
+        size: 7.5,
+        font: boldFont,
+        color: rgb(0.62, 0.69, 0.8),
+      });
+
+      const pdfBytes = await document.save();
+      const url = URL.createObjectURL(new Blob([pdfBytes.buffer as ArrayBuffer], { type: "application/pdf" }));
+      const link = window.document.createElement("a");
+      link.href = url;
+      link.download = `joolo-40-day-${verificationCode.toLowerCase().replaceAll("/", "-")}.pdf`;
+      window.document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setCertificateClaimed(true);
+      setCompletionDialog("certificate");
+    } catch (error) {
+      console.error("Unable to generate completion certificate", error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      notify(`Certificate could not be generated: ${errorMessage}`, 10000);
+    } finally {
+      setCertificateGenerating(false);
+    }
   }
 
   async function persistPhaseQuestProgress(id: string, isCompleted: boolean, achievedAmount: number | null) {
     if (pendingPhaseQuestIds.includes(id)) return;
     const quest = phaseDailyQuests.find((item) => item.id === id);
     if (!quest) {
-      notify("Quest progress could not be saved: daily quest was not found.");
+      notify("Challenge progress could not be saved: daily challenge was not found.");
       return;
     }
 
@@ -439,7 +1295,7 @@ export default function DashboardClient({
       });
 
       if (error) {
-        notify(`Quest progress could not be saved: ${error.message}`);
+        notify(`Challenge progress could not be saved: ${error.message}`);
         return;
       }
 
@@ -454,7 +1310,7 @@ export default function DashboardClient({
         || typeof savedProgress.progress_updated !== "boolean"
         || (savedProgress.completed_at !== null && typeof savedProgress.completed_at !== "string")
       ) {
-        notify("Quest progress could not be saved: Supabase returned an invalid progress record.");
+        notify("Challenge progress could not be saved: Supabase returned an invalid progress record.");
         return;
       }
       const normalizedProgress: PhaseQuestProgress = {
@@ -488,10 +1344,10 @@ export default function DashboardClient({
         return nextDrafts;
       });
       notify(normalizedProgress.completed_at
-        ? `Quest saved. You earned ${normalizedProgress.earned_coin} coins.`
-        : "Quest progress saved.");
+        ? `Challenge saved. You earned ${normalizedProgress.earned_coin} coins.`
+        : "Challenge progress saved.");
     } catch (error) {
-      notify(`Quest progress could not be saved: ${error instanceof Error ? error.message : "Unexpected error."}`);
+      notify(`Challenge progress could not be saved: ${error instanceof Error ? error.message : "Unexpected error."}`);
     } finally {
       setPendingPhaseQuestIds((ids) => ids.filter((questId) => questId !== id));
     }
@@ -531,11 +1387,11 @@ export default function DashboardClient({
         .single();
 
       if (error) {
-        notify(`Your quest progress could not be saved: ${error.message}`);
+        notify(`Your challenge progress could not be saved: ${error.message}`);
         return;
       }
       if (!data || data.id !== id) {
-        notify("Your quest progress could not be saved: Supabase returned an invalid record.");
+        notify("Your challenge progress could not be saved: Supabase returned an invalid record.");
         return;
       }
 
@@ -556,9 +1412,9 @@ export default function DashboardClient({
         delete nextDrafts[id];
         return nextDrafts;
       });
-      notify("Quest progress saved.");
+      notify("Challenge progress saved.");
     } catch (error) {
-      notify(`Your quest progress could not be saved: ${error instanceof Error ? error.message : "Unexpected error."}`);
+      notify(`Your challenge progress could not be saved: ${error instanceof Error ? error.message : "Unexpected error."}`);
     } finally {
       setPendingUserDailyQuestIds((ids) => ids.filter((questId) => questId !== id));
     }
@@ -598,11 +1454,11 @@ export default function DashboardClient({
           .single();
 
         if (error) {
-          notify(`Your custom quest could not be updated: ${error.message}`);
+          notify(`Your custom challenge could not be updated: ${error.message}`);
           return;
         }
         if (!data || data.id !== id) {
-          notify("Your custom quest could not be updated: Supabase returned an invalid record.");
+          notify("Your custom challenge could not be updated: Supabase returned an invalid record.");
           return;
         }
 
@@ -627,9 +1483,9 @@ export default function DashboardClient({
           delete nextDays[id];
           return nextDays;
         });
-        notify(done ? "Custom quest completed." : "Custom quest marked incomplete.");
+        notify(done ? "Custom challenge completed." : "Custom challenge marked incomplete.");
       } catch (error) {
-        notify(`Your custom quest could not be updated: ${error instanceof Error ? error.message : "Unexpected error."}`);
+        notify(`Your custom challenge could not be updated: ${error instanceof Error ? error.message : "Unexpected error."}`);
       } finally {
         setPendingUserDailyQuestIds((ids) => ids.filter((questId) => questId !== id));
       }
@@ -648,7 +1504,6 @@ export default function DashboardClient({
     }
 
     setChallenges((items) => items.map((item) => item.id === id ? { ...item, done } : item));
-    setCoins((value) => Math.max(0, value + (done ? target.reward : -target.reward)));
     if (done) {
       setChallengeCompletionDays((days) => ({ ...days, [id]: selectedDay }));
       setDailyStardustByDay((days) => ({ ...days, [selectedDay]: (days[String(selectedDay)] ?? 0) + target.reward }));
@@ -760,11 +1615,11 @@ export default function DashboardClient({
           .single();
 
         if (error) {
-          notify(`Your custom quest could not be updated: ${error.message}`);
+          notify(`Your custom challenge could not be updated: ${error.message}`);
           return;
         }
         if (!updatedQuest) {
-          notify("Your custom quest could not be updated: Supabase returned no record.");
+          notify("Your custom challenge could not be updated: Supabase returned no record.");
           return;
         }
 
@@ -792,9 +1647,9 @@ export default function DashboardClient({
           }
         }
         setProgressChallengeId(null);
-        notify("Custom quest updated.");
+        notify("Custom challenge updated.");
       } catch (error) {
-        notify(`Your custom quest could not be updated: ${error instanceof Error ? error.message : "Unexpected error."}`);
+        notify(`Your custom challenge could not be updated: ${error instanceof Error ? error.message : "Unexpected error."}`);
       } finally {
         setPendingUserDailyQuestIds((ids) => ids.filter((id) => id !== userDailyQuest.id));
       }
@@ -819,7 +1674,6 @@ export default function DashboardClient({
       targetUnit: targetAmount === null ? undefined : targetUnit,
     } : item));
     if (challenge.done) {
-      setCoins((value) => Math.max(0, value + reward - challenge.reward));
       const earnedOnDay = challengeCompletionDays[challenge.id] ?? selectedDay;
       setDailyStardustByDay((days) => ({ ...days, [earnedOnDay]: Math.max(0, (days[String(earnedOnDay)] ?? 0) + reward - challenge.reward) }));
     }
@@ -842,7 +1696,7 @@ export default function DashboardClient({
           .eq("user_id", userId);
 
         if (error) {
-          notify(`Your custom quest could not be deleted: ${error.message}`);
+          notify(`Your custom challenge could not be deleted: ${error.message}`);
           return;
         }
         setUserDailyQuests((items) => items.filter((item) => item.id !== userDailyQuest.id));
@@ -861,9 +1715,9 @@ export default function DashboardClient({
         }
         setProgressChallengeId(null);
         setConfirmChallengeDelete(false);
-        notify("Custom quest removed.");
+        notify("Custom challenge removed.");
       } catch (error) {
-        notify(`Your custom quest could not be deleted: ${error instanceof Error ? error.message : "Unexpected error."}`);
+        notify(`Your custom challenge could not be deleted: ${error instanceof Error ? error.message : "Unexpected error."}`);
       } finally {
         setPendingUserDailyQuestIds((ids) => ids.filter((id) => id !== userDailyQuest.id));
       }
@@ -872,7 +1726,6 @@ export default function DashboardClient({
     if (!challenge) return;
     setChallenges((items) => items.filter((item) => item.id !== challenge.id));
     if (challenge.done) {
-      setCoins((value) => Math.max(0, value - challenge.reward));
       const earnedOnDay = challengeCompletionDays[challenge.id] ?? selectedDay;
       setDailyStardustByDay((days) => ({ ...days, [earnedOnDay]: Math.max(0, (days[String(earnedOnDay)] ?? 0) - challenge.reward) }));
       setChallengeCompletionDays((days) => {
@@ -937,11 +1790,11 @@ export default function DashboardClient({
         .single();
 
       if (error) {
-        notify(`Your quest could not be created: ${error.message}`);
+        notify(`Your challenge could not be created: ${error.message}`);
         return;
       }
       if (!createdQuest) {
-        notify("Your quest could not be created: Supabase returned no record.");
+        notify("Your challenge could not be created: Supabase returned no record.");
         return;
       }
 
@@ -956,9 +1809,9 @@ export default function DashboardClient({
       setTaskTargetAmount("");
       setTaskUnit("pages");
       setCustomTaskUnit("");
-      notify(`Quest added for Day ${startDay}–${endDay}.`);
+      notify(`Challenge added for Day ${startDay}–${endDay}.`);
     } catch (error) {
-      notify(`Your quest could not be created: ${error instanceof Error ? error.message : "Unexpected error."}`);
+      notify(`Your challenge could not be created: ${error instanceof Error ? error.message : "Unexpected error."}`);
     } finally {
       setTaskSaving(false);
     }
@@ -1013,7 +1866,18 @@ export default function DashboardClient({
       .eq("user_id", userId);
 
     if (error) {
-      notify(`Your saved phase quest progress could not be reset: ${error.message}`);
+      notify(`Your saved phase challenge progress could not be reset: ${error.message}`);
+      return;
+    }
+
+    const { data: wallet, error: walletError } = await supabase
+      .from("coin_wallets")
+      .select("balance")
+      .eq("user_id", userId)
+      .single();
+
+    if (walletError) {
+      notify(`Challenge progress was reset, but your coin balance could not be refreshed: ${walletError.message}`);
       return;
     }
 
@@ -1023,7 +1887,7 @@ export default function DashboardClient({
     setSelectedDay(1);
     setDailyStardustByDay({});
     setChallengeCompletionDays({});
-    setCoins(267);
+    setCoins(wallet.balance);
     setGender("woman");
     setProfileName(name);
     setProfileTheme("dark");
@@ -1045,12 +1909,9 @@ export default function DashboardClient({
     setJourneyDateSaving(true);
     setJourneyDateError("");
     const supabase = createClient();
-    const { error } = await supabase
-      .from("challenge_settings")
-      .upsert(
-        { user_id: userId, start_date: journeyStartDateDraft, updated_at: new Date().toISOString() },
-        { onConflict: "user_id" },
-      );
+    const { data, error } = await supabase.rpc("save_challenge_start_date", {
+      p_start_date: journeyStartDateDraft,
+    });
 
     setJourneyDateSaving(false);
     if (error) {
@@ -1058,7 +1919,14 @@ export default function DashboardClient({
       return;
     }
 
-    setJourneyStartDate(journeyStartDateDraft);
+    const result = Array.isArray(data) ? data[0] : data;
+    if (!result || typeof result !== "object" || !("start_date" in result) || typeof result.start_date !== "string") {
+      setJourneyDateError("Tanggal mulai gagal disimpan: Supabase mengembalikan data yang tidak valid.");
+      return;
+    }
+
+    setJourneyStartDate(result.start_date);
+    setJourneyStartDateDraft(result.start_date);
     setJourneyDatePickerOpen(false);
     notify("Challenge start date saved to your account.");
   }
@@ -1167,7 +2035,7 @@ export default function DashboardClient({
       <main className="cosmos login-screen">
         <div className="stars stars-one" /><div className="stars stars-two" />
         <div className="nebula nebula-left" /><div className="nebula nebula-right" />
-        <p className="login-loading" role="status">Opening your orbit...</p>
+        <p className="login-loading" role="status">{t("Opening your orbit...")}</p>
       </main>
     );
   }
@@ -1177,81 +2045,82 @@ export default function DashboardClient({
       <div className="stars stars-one" /><div className="stars stars-two" />
       <div className="nebula nebula-left" /><div className="nebula nebula-right" />
       <header className="topbar shell">
-        <a href="#top" className="brand" aria-label="JOolo home"><span className="brand-mark">✦</span><span>JO<span className="brand-muted">O</span>LO<span className="brand-dot">.</span></span></a>
-        <nav className="main-nav" aria-label="Main navigation">
-          <button className="nav-link" onClick={() => setLeaderboardOpen(true)}>Leaderboard</button>
-          <a className={`nav-link ${bonusOpen ? "" : "active"}`} href="#calendar" onClick={() => setBonusOpen(false)}>Challenge</a>
-          <button className={`nav-link ${bonusOpen ? "active bonus-nav-active" : ""}`} onClick={() => { setBonusOpen(true); setBonusSearch(""); setBonusSearchOpen(false); }}>Bonus</button>
+        <a href="#top" className="brand" aria-label={t("JOolo home")}><span className="brand-mark">✦</span><span>JO<span className="brand-muted">O</span>LO<span className="brand-dot">.</span></span></a>
+        <nav className="main-nav" aria-label={t("Main navigation")}>
+          <button className="nav-link" onClick={() => setLeaderboardOpen(true)}>{t("Leaderboard")}</button>
+          <a className={`nav-link ${bonusOpen ? "" : "active"}`} href="#calendar" onClick={() => setBonusOpen(false)}>{t("Challenge")}</a>
+          <button className={`nav-link ${bonusOpen ? "active bonus-nav-active" : ""}`} onClick={() => { setBonusOpen(true); setBonusSearch(""); setBonusSearchOpen(false); }}>{t("Bonus")}</button>
         </nav>
         <div className="header-actions">
-          <button className="icon-button language-button" onClick={() => notify("Language: English")} aria-label="Language"><Icon name="globe" size={19} /></button>
-          <button className="icon-button" onClick={openProfile} aria-label="Profile"><Icon name="user" size={21} /></button>
-          <a className="mobile-cta" href="#today">Today <Icon name="arrow" size={16} /></a>
+          {languageSelector}
+          <button className="icon-button" onClick={openProfile} aria-label={t("Profile")}><Icon name="user" size={21} /></button>
+          <a className="mobile-cta" href="#today">{t("Today")} <Icon name="arrow" size={16} /></a>
         </div>
       </header>
 
       <div className="shell page-content" id="top">
-        <section className="hero-row" aria-label="Your journey overview">
+        <section className="hero-row" aria-label={t("Your journey overview")}>
           <div className="hero-intro">
-            <div className="eyebrow"><span className="eyebrow-line" /> YOUR NEXT CHAPTER STARTS HERE</div>
-            <h1>Become who<br /><span>you came here to be.</span></h1>
-            <p>Forty days. A few small promises. A whole new orbit.</p>
-            <a className="primary-button" href="#today">Continue your journey <Icon name="arrow" size={17} /></a>
+            <div className="eyebrow"><span className="eyebrow-line" /> {t("YOUR NEXT CHAPTER STARTS HERE")}</div>
+            <h1>{t("Become who")}<br /><span>{t("you came here to be.")}</span></h1>
+            <p>{t("Forty days. A few small promises. A whole new orbit.")}</p>
+            <a className="primary-button" href="#today">{t("Continue your journey")} <Icon name="arrow" size={17} /></a>
           </div>
-          <div className="overview-cards">
-            <div className="overview-card phase-card">
-              <div className="phase-emblem"><Icon name="sparkles" size={35} /></div>
-              <div><span className="card-kicker">YOUR CURRENT PHASE</span><strong>{selectedPhase?.phase_category_id.replace("PHASE_", "Phase ") ?? "Phase 01"} <span>·</span> {selectedPhase?.phase_name ?? "Awakening"}</strong><small>{selectedPhase?.focus ?? "Every journey begins with a spark."}</small></div>
-              <span className="phase-index">{selectedPhase?.phase_category_id.replace("PHASE_", "") ?? "01"}</span>
+          <div className="hero-overview">
+            <div className="overview-cards">
+              <div className="overview-card cue-card rank-card">
+                <span className="card-kicker">{t("DAILY LEADERBOARD")}</span>
+                <strong>#{dailyLeaderboardRank || "—"}</strong>
+                <small>{t("YOUR RANK")}</small>
+              </div>
+              <div className="overview-card phase-card">
+                <div className="phase-emblem"><Icon name="sparkles" size={35} /></div>
+                <div><span className="card-kicker">{t("YOUR CURRENT PHASE")}</span><strong>{currentPhase?.phase_category_id.replace("PHASE_", language === "id" ? "Fase " : "Phase ") ?? t("Phase 01")} <span>·</span> {t(currentPhase?.phase_name ?? "Awakening")}</strong><small>{currentPhase?.focus ?? t("Every journey begins with a spark.")}</small></div>
+                <span className="phase-index">{currentPhase?.phase_category_id.replace("PHASE_", "") ?? "01"}</span>
+              </div>
+              <div className="overview-card stat-card">
+                <span className="stat-icon coin-icon">✦</span><strong>{coins}</strong><span className="stat-label">{t("TOTAL COIN")}</span>
+              </div>
+              <div className="overview-card lives-card">
+                <div className="lives-heading"><span className="card-kicker">{t("TOTAL LIVES")}</span><strong>{lives}<small> / 7</small></strong></div>
+                <div className="life-pips" aria-label={language === "id" ? `${lives} dari 7 nyawa tersisa` : `${lives} of 7 lives remaining`}>
+                  {Array.from({ length: 7 }, (_, index) => <span className={index < lives ? "life-active" : ""} key={index}>♥</span>)}
+                </div>
+                <small className="lives-note">{t("No completed challenge in a day costs 1 life. At 0, 250 coins automatically restore 1 life; without enough coins, your challenge data resets.")}</small>
+              </div>
             </div>
-            <div className="overview-card stat-card">
-              <span className="stat-icon coin-icon">✦</span><strong>{coins}</strong><span className="stat-label">STARDUST</span>
-            </div>
-            <div className="overview-card streak-card">
-              <div className="streak-top"><span className="card-kicker">YOUR STREAK</span><span className="streak-fire"><Icon name="flame" size={16} /> 3 days</span></div>
-              <div className="hearts" aria-label="3 day streak"><span>✦</span><span>✦</span><span>✦</span><span className="dim">✦</span><span className="dim">✦</span></div>
-              <small>Keep showing up. It’s working.</small>
-            </div>
-            <button className="overview-card start-card start-date-control" type="button" onClick={openJourneyDatePicker} aria-label={`Change challenge start date, currently ${journeyStartDateLabel}`}>
+            <button className="overview-card start-card start-date-control" type="button" onClick={openJourneyDatePicker} aria-label={`${t("Change challenge start date, currently")} ${journeyStartDateLabel}`}>
               <span className="start-dot" />
-              <span className="start-date-caption">CHALLENGE START</span>
+              <span className="start-date-caption">{t("CHALLENGE START")}</span>
               <strong>{journeyStartDateLabel}</strong>
-              <span className="start-date-edit">Input start date</span>
             </button>
           </div>
         </section>
 
         <section className="calendar-panel glass-panel" id="calendar">
           <div className="section-heading calendar-heading">
-            <div><div className="eyebrow"><span className="eyebrow-line" /> THE 40-DAY QUEST</div><h2>Your map to <span>more you.</span></h2></div>
-            <div className="phase-pill"><span className="phase-light" /> {selectedPhase?.phase_category_id.replace("_", " ") ?? "PHASE 01"} <b>{selectedPhase?.phase_name.toUpperCase() ?? "AWAKENING"}</b></div>
+            <div><div className="eyebrow"><span className="eyebrow-line" /> {t("THE 40-DAY CHALLENGE")}</div><h2>{t("Your map to ")}<span>{t("more you.")}</span></h2></div>
+            <div className="phase-pill"><span className="phase-light" /> {selectedPhase?.phase_category_id.replace("PHASE_", language === "id" ? "FASE " : "PHASE ") ?? t("PHASE 01")} <b>{t(selectedPhase?.phase_name ?? "Awakening").toUpperCase()}</b></div>
           </div>
-          <div className="calendar-grid" role="group" aria-label="Select a challenge day">
+          <div className="calendar-grid" role="group" aria-label={t("Select a challenge day")}>
             {Array.from({ length: 40 }, (_, index) => {
               const day = index + 1;
               const isCurrent = day === selectedDay;
               const isPast = day < selectedDay;
-              return <button key={day} className={`day-cell ${isCurrent ? "current" : ""} ${isPast ? "past" : ""}`} onClick={() => setSelectedDay(day)} aria-label={`Day ${day}${isCurrent ? ", selected" : ""}`} aria-pressed={isCurrent}>
+              return <button key={day} className={`day-cell ${isCurrent ? "current" : ""} ${isPast ? "past" : ""}`} onClick={() => setSelectedDay(day)} aria-label={`${t("Day ")}${day}${isCurrent ? t(", selected") : ""}`} aria-pressed={isCurrent}>
                 <span>{String(day).padStart(2, "0")}</span><i className={isPast ? "complete-dot" : ""} />
               </button>;
             })}
           </div>
-          <div className="calendar-footer"><span><span className="legend-dot current-dot" /> TODAY</span><span><span className="legend-dot complete-dot" /> COMPLETE</span><span className="calendar-note">One day at a time. You’re right on track.</span></div>
+          <div className="calendar-footer"><span><span className="legend-dot current-dot" /> {t("TODAY")}</span><span><span className="legend-dot complete-dot" /> {t("COMPLETE")}</span><span className="calendar-note">{t("One day at a time. You’re right on track.")}</span></div>
         </section>
 
         <section className="daily-section" id="today">
           <div className="daily-heading">
-            <div className="day-title-wrap"><div className="day-label">YOUR DAILY QUEST</div><h2>DAY <span>{String(dayNumber).padStart(2, "0")}</span></h2><p className="daily-quote">“{quote}” <span>— T.S. Eliot</span></p></div>
+            <div className="day-title-wrap"><div className="day-label">{t("YOUR DAILY CHALLENGE")}</div><h2>{t("DAY ")}<span>{String(dayNumber).padStart(2, "0")}</span></h2><p className="daily-quote">{selectedPhase?.focus ?? t("Focus information is not available for this day.")}</p></div>
             <div className="daily-controls">
-              <div className="progress-chip"><span className="progress-ring">{progress}<small>%</small></span><span><b>{completed} OF {activeChallenges.length}</b><small>QUESTS DONE</small></span></div>
-              <button className="add-button" onClick={openTaskCreator} aria-label="Add a challenge"><Icon name="plus" size={23} /><span>Add quest</span></button>
-            </div>
-          </div>
-          <div className="gender-control" id="profile-personalization" aria-label="Personalize challenge photos">
-            <span>PERSONALIZE YOUR JOURNEY</span>
-            <div className="gender-switch" role="group" aria-label="Choose your avatar style">
-              <button className={gender === "woman" ? "selected" : ""} onClick={() => selectGender("woman")} aria-pressed={gender === "woman"}>Woman</button>
-              <button className={gender === "man" ? "selected" : ""} onClick={() => selectGender("man")} aria-pressed={gender === "man"}>Man</button>
+              <div className="progress-chip"><span className="progress-ring">{progress}<small>%</small></span><span><b>{completed} {language === "id" ? "DARI" : "OF"} {activeChallenges.length}</b><small>{t("CHALLENGES DONE")}</small></span></div>
+              <button className="add-button" onClick={openTaskCreator} aria-label={t("Add a challenge")}><Icon name="plus" size={23} /><span>{t("Add challenge")}</span></button>
             </div>
           </div>
           <div className="challenge-list">
@@ -1276,12 +2145,12 @@ export default function DashboardClient({
                   ? userQuest.earned_coin
                   : challenge.reward;
               return <article className={`challenge-card ${challenge.accent} ${challenge.done ? "is-done" : ""} ${challenge.custom ? "custom-card" : ""} ${challenge.phaseFocus ? "phase-quest-card" : ""}`} key={challenge.id} style={coverImage ? { backgroundImage: `linear-gradient(90deg, rgba(8, 17, 31, .98) 0%, rgba(8, 17, 31, .91) 38%, rgba(8, 17, 31, .31) 100%), url("${coverImage}")` } : undefined}>
-                {userQuest && <button className="user-quest-edit" type="button" onClick={() => openProgressEditor(challenge)} disabled={pendingUserDailyQuestIds.includes(userQuest.id)}><Icon name="sparkles" size={15} /> Edit quest</button>}
+                {userQuest && <button className="user-quest-edit" type="button" onClick={() => openProgressEditor(challenge)} disabled={pendingUserDailyQuestIds.includes(userQuest.id)}><Icon name="sparkles" size={15} /> {t("Edit challenge")}</button>}
                 <div className="card-corner" />
-                <div className="reward-tag"><span>✦</span> {displayedReward} <small>{challenge.phaseFocus ? "COIN" : "XP"}</small></div>
-                <div className="challenge-content"><span className="challenge-category">{challenge.phaseFocus ?? (challenge.custom ? "YOUR QUEST" : index === 0 ? "BODY · MOVEMENT" : index === 1 ? "MIND · LEARNING" : "SOUL · REFLECTION")}</span><h3>{challenge.title}</h3><p className="challenge-subtitle">{challenge.subtitle}</p><div className="challenge-detail"><span>{challenge.detail.split(" · ")[0]}</span><i /> <span>{challenge.detail.split(" · ")[1]}</span><i /> <span>{challenge.done ? "Complete ✓" : challenge.detail.split(" · ")[2]}</span></div></div>
+                <div className="reward-tag"><span>✦</span> {displayedReward} <small>{t(challenge.phaseFocus ? "COIN" : "XP")}</small></div>
+                <div className="challenge-content"><span className="challenge-category">{challenge.phaseFocus ?? (challenge.custom ? t("YOUR CHALLENGE") : t(index === 0 ? "BODY · MOVEMENT" : index === 1 ? "MIND · LEARNING" : "SOUL · REFLECTION"))}</span><h3>{challenge.title}</h3><p className="challenge-subtitle">{challenge.subtitle}</p><div className="challenge-detail"><span>{challenge.detail.split(" · ")[0]}</span><i /> <span>{challenge.detail.split(" · ")[1]}</span><i /> <span>{challenge.done ? t("Complete ✓") : challenge.detail.split(" · ")[2]}</span></div></div>
                 {challenge.phaseFocus && <div className="phase-progress-editor">
-                  <label htmlFor={`phase-progress-${challenge.id}`}>Your progress <span>{formatProgressAmount(validProgressDraft ? draftedAmount : phaseProgress?.achieved_amount ?? 0)} / {challenge.phaseTarget}</span></label>
+                  <label htmlFor={`phase-progress-${challenge.id}`}>{t("Your progress")} <span>{formatProgressAmount(validProgressDraft ? draftedAmount : phaseProgress?.achieved_amount ?? 0)} / {challenge.phaseTarget}</span></label>
                   <div className="phase-progress-controls">
                     <input
                       id={`phase-progress-${challenge.id}`}
@@ -1294,7 +2163,7 @@ export default function DashboardClient({
                         setPhaseProgressDrafts((drafts) => ({ ...drafts, [challenge.id]: value }));
                       }}
                       disabled={pendingPhaseQuestIds.includes(challenge.id)}
-                      aria-label={`Progress amount for ${challenge.title}`}
+                      aria-label={`${t("Progress amount for ")}${challenge.title}`}
                     />
                     <span>/ {challenge.phaseTarget}</span>
                     <button
@@ -1302,13 +2171,13 @@ export default function DashboardClient({
                       onClick={() => savePhaseQuestProgress(challenge.id)}
                       disabled={!hasProgressDraft || !validProgressDraft || pendingPhaseQuestIds.includes(challenge.id)}
                     >
-                      Save progress
+                      {t("Save progress")}
                     </button>
                   </div>
-                  <small>Save your achievement here, then complete the quest to receive coins. Reaching the target adds +10 bonus coins; completing without saved progress counts as reaching it.</small>
+                  <small>{t("Save your achievement here, then complete the challenge to receive coins. Reaching the target adds +10 bonus coins; completing without saved progress counts as reaching it.")}</small>
                 </div>}
                 {userQuest?.target_amount !== null && userQuest && <div className="phase-progress-editor">
-                  <label htmlFor={`user-quest-progress-${challenge.id}`}>Your progress <span>{formatProgressAmount(userQuestProgressDrafts[challenge.id] !== undefined && userQuestProgressDrafts[challenge.id].trim() !== "" ? Number(userQuestProgressDrafts[challenge.id]) : userQuest.achieved_amount)} / {formatProgressAmount(userQuest.target_amount)} {userQuest.target_unit}</span></label>
+                  <label htmlFor={`user-quest-progress-${challenge.id}`}>{t("Your progress")} <span>{formatProgressAmount(userQuestProgressDrafts[challenge.id] !== undefined && userQuestProgressDrafts[challenge.id].trim() !== "" ? Number(userQuestProgressDrafts[challenge.id]) : userQuest.achieved_amount)} / {formatProgressAmount(userQuest.target_amount)} {userQuest.target_unit}</span></label>
                   <div className="phase-progress-controls">
                     <input
                       id={`user-quest-progress-${challenge.id}`}
@@ -1321,89 +2190,79 @@ export default function DashboardClient({
                         setUserQuestProgressDrafts((drafts) => ({ ...drafts, [challenge.id]: value }));
                       }}
                       disabled={pendingUserDailyQuestIds.includes(challenge.id)}
-                      aria-label={`Progress amount for ${challenge.title}`}
+                      aria-label={`${t("Progress amount for ")}${challenge.title}`}
                     />
                     <span>/ {formatProgressAmount(userQuest.target_amount)} {userQuest.target_unit}</span>
-                    <button type="button" onClick={() => saveUserQuestProgress(challenge.id)} disabled={userProgressDraft === undefined || userProgressDraft.trim() === "" || pendingUserDailyQuestIds.includes(challenge.id)}>Save progress</button>
+                    <button type="button" onClick={() => saveUserQuestProgress(challenge.id)} disabled={userProgressDraft === undefined || userProgressDraft.trim() === "" || pendingUserDailyQuestIds.includes(challenge.id)}>{t("Save progress")}</button>
                   </div>
-                  <small>Reach the target for +10 bonus coins when you complete this quest.</small>
+                  <small>{t("Reach the target for +10 bonus coins when you complete this challenge.")}</small>
                 </div>}
-                <button className="complete-button" onClick={() => toggleChallenge(challenge.id)} disabled={pendingPhaseQuestIds.includes(challenge.id) || pendingUserDailyQuestIds.includes(challenge.id)} aria-label={`${challenge.done ? "Mark incomplete" : "Complete"} ${challenge.title}`} aria-pressed={challenge.done}><Icon name="check" size={22} /><span>{pendingPhaseQuestIds.includes(challenge.id) || pendingUserDailyQuestIds.includes(challenge.id) ? "Saving..." : challenge.done ? "Completed" : "Complete quest"}</span></button>
+                <button className="complete-button" onClick={() => toggleChallenge(challenge.id)} disabled={pendingPhaseQuestIds.includes(challenge.id) || pendingUserDailyQuestIds.includes(challenge.id)} aria-label={`${t(challenge.done ? "Mark incomplete" : "Complete")} ${challenge.title}`} aria-pressed={challenge.done}><Icon name="check" size={22} /><span>{pendingPhaseQuestIds.includes(challenge.id) || pendingUserDailyQuestIds.includes(challenge.id) ? t("Saving...") : challenge.done ? t("Completed") : t("Complete challenge")}</span></button>
                 <div className="card-progress"><span style={{ width: challenge.done ? "100%" : "18%" }} /></div>
               </article>;
             })}
           </div>
-          {dayNumber === 40 && <div className={`day-40-actions ${canClaimCertificate ? "unlocked" : "locked"}`} aria-label="40-day challenge completion">
-            {!canClaimCertificate && <p className="day-40-lock-note">Complete all daily quests to unlock these actions.</p>}
-            <button className="day-40-action-button evaluation-action" type="button" disabled={!canClaimCertificate} title={canClaimCertificate ? "View your 40-day evaluation results" : "Complete all quests to unlock"} onClick={() => {
+          {dayNumber === 40 && <div className={`day-40-actions ${canClaimCertificate ? "unlocked" : "locked"}`} aria-label={t("40-day challenge completion")}>
+            {!canClaimCertificate && <p className="day-40-lock-note">{t("Complete at least one challenge on each of the 40 days to unlock these actions.")}</p>}
+            <button className="day-40-action-button evaluation-action" type="button" disabled={!canClaimCertificate} title={t(canClaimCertificate ? "View your 40-day evaluation results" : "Complete all challenges to unlock")} onClick={() => {
               if (canClaimCertificate) setCompletionDialog("evaluation");
             }}>
-              <Icon name="sparkles" size={19} /> 40-Day Evaluation Results <Icon name="arrow" size={17} />
+              <Icon name="sparkles" size={19} /> {t("40-Day Evaluation Results")} <Icon name="arrow" size={17} />
             </button>
-            <button className={`day-40-action-button certificate-action ${certificateClaimed ? "claimed" : ""}`} type="button" disabled={!canClaimCertificate} title={canClaimCertificate ? "Claim your completion certificate" : "Complete all quests to unlock"} onClick={() => {
-              if (!canClaimCertificate) return;
-              if (!certificateClaimed) setCertificateClaimed(true);
-              setCompletionDialog("certificate");
-            }}>
-              <Icon name="certificate" size={19} /> {certificateClaimed ? "Certificate Claimed" : "Claim Certificate"} <Icon name="arrow" size={17} />
+            <button className={`day-40-action-button certificate-action ${certificateClaimed ? "claimed" : ""}`} type="button" disabled={!canClaimCertificate || certificateGenerating} title={t(canClaimCertificate ? "Claim your completion certificate" : "Complete all challenges to unlock")} onClick={() => { void claimCompletionCertificate(); }}>
+              <Icon name="certificate" size={19} /> {t(certificateGenerating ? "Generating certificate..." : certificateClaimed ? "Download certificate again" : "Claim Certificate")} <Icon name="arrow" size={17} />
             </button>
           </div>}
         </section>
 
-        <section className="rewards-panel glass-panel" id="rewards">
-          <div className="reward-orb"><Icon name="trophy" size={28} /></div>
-          <div className="reward-copy"><span className="eyebrow"><span className="eyebrow-line" /> LITTLE WINS, BIG ENERGY</span><h2>Your next reward is <span>closer than you think.</span></h2><p>Complete quests, collect stardust, and unlock the next phase of your story.</p></div>
-          <button className="outline-button" onClick={() => { setBonusOpen(true); setBonusSearch(""); setBonusSearchOpen(false); }}>Explore rewards <Icon name="arrow" size={16} /></button>
-        </section>
-
-        <footer className="footer"><a href="#top" className="footer-brand">✦ JOolo<span>.</span></a><span>Made for your becoming <i>✧</i> 2026</span><a href="#top">Back to the stars ↑</a></footer>
+        <footer className="footer"><a href="#top" className="footer-brand">✦ JOolo<span>.</span></a><span>{t("Made for your becoming")} <i>✧</i> 2026</span><a href="#top">{t("Back to the stars ↑")}</a></footer>
       </div>
 
       {modalOpen && <div className="create-task-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeTaskCreator(); }}>
         <section className="create-task-screen" role="dialog" aria-modal="true" aria-labelledby="create-task-title">
-          <header className="create-task-heading"><button className="create-task-back" type="button" onClick={closeTaskCreator} aria-label="Back to challenge"><Icon name="back" size={23} /></button><h2 id="create-task-title">Create Task</h2><span /></header>
+          <header className="create-task-heading"><button className="create-task-back" type="button" onClick={closeTaskCreator} aria-label={t("Back to challenge")}><Icon name="back" size={23} /></button><h2 id="create-task-title">{t("Create Task")}</h2><span /></header>
           <form className="create-task-form" onSubmit={addChallenge}>
-            <label className="task-field-label" htmlFor="challenge-title">Task name</label>
-            <input className="task-title-input" id="challenge-title" name="task_name" value={taskName} onChange={(event) => setTaskName(event.currentTarget.value)} placeholder="e.g. Run 5 km, read 10 pages..." maxLength={60} required autoFocus />
-            <label className="task-field-label" htmlFor="challenge-description">Short description</label>
-            <textarea className="task-title-input" id="challenge-description" name="short_description" value={taskDescription} onChange={(event) => setTaskDescription(event.currentTarget.value)} placeholder="What do you want to achieve?" maxLength={300} rows={3} required />
+            <label className="task-field-label" htmlFor="challenge-title">{t("Task name")}</label>
+            <input className="task-title-input" id="challenge-title" name="task_name" value={taskName} onChange={(event) => setTaskName(event.currentTarget.value)} placeholder={t("e.g. Run 5 km, read 10 pages...")} maxLength={60} required autoFocus />
+            <label className="task-field-label" htmlFor="challenge-description">{t("Short description")}</label>
+            <textarea className="task-title-input" id="challenge-description" name="short_description" value={taskDescription} onChange={(event) => setTaskDescription(event.currentTarget.value)} placeholder={t("What do you want to achieve?")} maxLength={300} rows={3} required />
             <div className="task-field-grid">
               <label className="task-field schedule-field">
-                <span className="task-field-label">Start date</span>
+                <span className="task-field-label">{t("Start date")}</span>
                 <select name="start_date" value={taskStartDay} onChange={(event) => {
                   const day = Number(event.currentTarget.value);
                   setTaskStartDay(day);
                   if (taskEndDay < day) setTaskEndDay(day);
-                }} aria-label="Start date">
-                  {Array.from({ length: 40 }, (_, index) => <option key={index + 1} value={index + 1}>Day {String(index + 1).padStart(2, "0")}{index + 1 === selectedDay ? " · selected" : ""}</option>)}
+                }} aria-label={t("Start date")}>
+                  {Array.from({ length: 40 }, (_, index) => <option key={index + 1} value={index + 1}>{t("Day ")}{String(index + 1).padStart(2, "0")}{index + 1 === selectedDay ? t(" · selected") : ""}</option>)}
                 </select>
               </label>
               <label className="task-field schedule-field">
-                <span className="task-field-label">End date</span>
-                <select name="end_date" value={taskEndDay} onChange={(event) => setTaskEndDay(Number(event.currentTarget.value))} aria-label="End date">
-                  {Array.from({ length: 40 }, (_, index) => index + 1).filter((day) => day >= taskStartDay).map((day) => <option key={day} value={day}>Day {String(day).padStart(2, "0")}</option>)}
+                <span className="task-field-label">{t("End date")}</span>
+                <select name="end_date" value={taskEndDay} onChange={(event) => setTaskEndDay(Number(event.currentTarget.value))} aria-label={t("End date")}>
+                  {Array.from({ length: 40 }, (_, index) => index + 1).filter((day) => day >= taskStartDay).map((day) => <option key={day} value={day}>{t("Day ")}{String(day).padStart(2, "0")}</option>)}
                 </select>
               </label>
             </div>
             <label className="task-field schedule-field">
-              <span className="task-field-label">Frequency</span>
-              <select name="frequency" value={taskSchedule} onChange={(event) => setTaskSchedule(event.currentTarget.value as "one-time" | "daily" | "weekly")} aria-label="Frequency">
-                <option value="one-time">One-Time</option>
-                <option value="daily">Daily</option>
-                <option value="weekly">Weekly</option>
+              <span className="task-field-label">{t("Frequency")}</span>
+              <select name="frequency" value={taskSchedule} onChange={(event) => setTaskSchedule(event.currentTarget.value as "one-time" | "daily" | "weekly")} aria-label={t("Frequency")}>
+                <option value="one-time">{t("One-Time")}</option>
+                <option value="daily">{t("Daily")}</option>
+                <option value="weekly">{t("Weekly")}</option>
               </select>
             </label>
             <div className="task-field-grid">
-              <label className="task-field"><span className="task-field-label">Level</span><select name="level" value={taskLevel} onChange={(event) => setTaskLevel(event.currentTarget.value as "Easy" | "Medium" | "Hard")}><option>Easy</option><option>Medium</option><option>Hard</option></select></label>
-              <label className="task-field"><span className="task-field-label">Total coin</span><div className="task-reward-preview"><span>✦</span><output aria-live="polite">{taskReward.toLocaleString()} coin</output></div><small className="task-reward-hint">Set automatically from the selected level</small></label>
+              <label className="task-field"><span className="task-field-label">{t("Level")}</span><select name="level" value={taskLevel} onChange={(event) => setTaskLevel(event.currentTarget.value as "Easy" | "Medium" | "Hard")}><option value="Easy">{t("Easy")}</option><option value="Medium">{t("Medium")}</option><option value="Hard">{t("Hard")}</option></select></label>
+              <label className="task-field"><span className="task-field-label">{t("Total coin")}</span><div className="task-reward-preview"><span>✦</span><output aria-live="polite">{taskReward.toLocaleString()} {t("coin")}</output></div><small className="task-reward-hint">{t("Set automatically from the selected level")}</small></label>
             </div>
             <fieldset className="task-fieldset target-fieldset">
-              <legend className="task-field-label">Target (optional)</legend>
-              <div className="target-inputs"><input aria-label="Target amount" name="target" type="number" min="0.1" step="any" placeholder="Amount..." value={taskTargetAmount} onChange={(event) => setTaskTargetAmount(event.currentTarget.value)} /><span className="target-divider">/</span><select name="unit" aria-label="Target unit" value={taskUnit} onChange={(event) => setTaskUnit(event.currentTarget.value)}><option value="pages">pages</option><option value="km">km</option><option value="minutes">minutes</option><option value="reps">reps</option><option value="glasses">glasses</option><option value="times">times</option><option value="custom">Custom / Manual</option></select></div>
-              {taskUnit === "custom" && <input className="custom-target-unit" aria-label="Custom target unit" name="customUnit" value={customTaskUnit} onChange={(event) => setCustomTaskUnit(event.currentTarget.value)} placeholder="Enter your unit (e.g. chapters)" maxLength={24} required={Boolean(taskTargetAmount.trim())} />}
-              <small className="task-target-hint">Complete with the target achieved for +10 bonus coins. Without a target, completion awards the level coin only.</small>
+              <legend className="task-field-label">{t("Target (optional)")}</legend>
+              <div className="target-inputs"><input aria-label={t("Target amount")} name="target" type="number" min="0.1" step="any" placeholder={t("Amount...")} value={taskTargetAmount} onChange={(event) => setTaskTargetAmount(event.currentTarget.value)} /><span className="target-divider">/</span><select name="unit" aria-label={t("Target unit")} value={taskUnit} onChange={(event) => setTaskUnit(event.currentTarget.value)}><option value="pages">{t("pages")}</option><option value="km">km</option><option value="minutes">{t("minutes")}</option><option value="reps">{t("reps")}</option><option value="glasses">{t("glasses")}</option><option value="times">{t("times")}</option><option value="custom">{t("Custom / Manual")}</option></select></div>
+              {taskUnit === "custom" && <input className="custom-target-unit" aria-label={t("Custom target unit")} name="customUnit" value={customTaskUnit} onChange={(event) => setCustomTaskUnit(event.currentTarget.value)} placeholder={t("Enter your unit (e.g. chapters)")} maxLength={24} required={Boolean(taskTargetAmount.trim())} />}
+              <small className="task-target-hint">{t("Complete with the target achieved for +10 bonus coins. Without a target, completion awards the level coin only.")}</small>
             </fieldset>
-            <button className="create-task-submit" type="submit" disabled={taskSaving}>{taskSaving ? "Saving quest..." : "Save quest"} <Icon name="arrow" size={20} /></button>
+            <button className="create-task-submit" type="submit" disabled={taskSaving}>{taskSaving ? t("Saving challenge...") : t("Save challenge")} <Icon name="arrow" size={20} /></button>
           </form>
         </section>
       </div>}
@@ -1411,82 +2270,82 @@ export default function DashboardClient({
       {progressChallengeId && <div className="progress-editor-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setProgressChallengeId(null); }}>
         <section className="progress-editor-screen" role="dialog" aria-modal="true" aria-labelledby="progress-editor-title">
           <header className="progress-editor-heading">
-            <button className="progress-editor-back" type="button" onClick={() => setProgressChallengeId(null)} aria-label="Back to challenges"><Icon name="back" size={23} /></button>
-            <h2 id="progress-editor-title">{userDailyQuests.some((quest) => quest.id === progressChallengeId) ? "Edit quest" : "Progress"}</h2>
-            {userDailyQuests.some((quest) => quest.id === progressChallengeId) && <button className="progress-editor-delete" type="button" onClick={() => setConfirmChallengeDelete(true)} aria-label="Delete quest"><Icon name="trash" size={22} /></button>}
+            <button className="progress-editor-back" type="button" onClick={() => setProgressChallengeId(null)} aria-label={t("Back to challenges")}><Icon name="back" size={23} /></button>
+            <h2 id="progress-editor-title">{t(userDailyQuests.some((quest) => quest.id === progressChallengeId) ? "Edit challenge" : "Progress")}</h2>
+            {userDailyQuests.some((quest) => quest.id === progressChallengeId) && <button className="progress-editor-delete" type="button" onClick={() => setConfirmChallengeDelete(true)} aria-label={t("Delete challenge")}><Icon name="trash" size={22} /></button>}
           </header>
           <form className="progress-editor-form" onSubmit={updateChallenge}>
-            <label className="progress-editor-label" htmlFor="progress-task-name">Task name</label>
+            <label className="progress-editor-label" htmlFor="progress-task-name">{t("Task name")}</label>
             <input className="progress-editor-input progress-title-input" id="progress-task-name" name="task_name" value={progressTitle} onChange={(event) => setProgressTitle(event.currentTarget.value)} maxLength={60} required />
-            <label className="progress-editor-label" htmlFor="progress-task-description">Description</label>
+            <label className="progress-editor-label" htmlFor="progress-task-description">{t("Description")}</label>
             <textarea className="progress-editor-input" id="progress-task-description" name="short_description" value={progressDescription} onChange={(event) => setProgressDescription(event.currentTarget.value)} maxLength={300} rows={3} />
             <div className="task-field-grid">
               <label className="progress-editor-field">
-                <span className="progress-editor-label">Start date</span>
+                <span className="progress-editor-label">{t("Start date")}</span>
                 <select name="start_date" value={progressStartDay} onChange={(event) => {
                   const day = Number(event.currentTarget.value);
                   setProgressStartDay(day);
                   if (progressEndDay < day) setProgressEndDay(day);
                 }}>
-                  {Array.from({ length: 40 }, (_, index) => <option key={index + 1} value={index + 1}>Day {String(index + 1).padStart(2, "0")}</option>)}
+                  {Array.from({ length: 40 }, (_, index) => <option key={index + 1} value={index + 1}>{t("Day ")}{String(index + 1).padStart(2, "0")}</option>)}
                 </select>
               </label>
               <label className="progress-editor-field">
-                <span className="progress-editor-label">End date</span>
+                <span className="progress-editor-label">{t("End date")}</span>
                 <select name="end_date" value={progressEndDay} onChange={(event) => setProgressEndDay(Number(event.currentTarget.value))}>
-                  {Array.from({ length: 40 }, (_, index) => index + 1).filter((day) => day >= progressStartDay).map((day) => <option key={day} value={day}>Day {String(day).padStart(2, "0")}</option>)}
+                  {Array.from({ length: 40 }, (_, index) => index + 1).filter((day) => day >= progressStartDay).map((day) => <option key={day} value={day}>{t("Day ")}{String(day).padStart(2, "0")}</option>)}
                 </select>
               </label>
             </div>
             <label className="progress-editor-field">
-              <span className="progress-editor-label">Frequency</span>
+              <span className="progress-editor-label">{t("Frequency")}</span>
               <select name="frequency" value={progressSchedule} onChange={(event) => setProgressSchedule(event.currentTarget.value as "one-time" | "daily" | "weekly")}>
-                <option value="one-time">One-Time</option>
-                <option value="daily">Daily</option>
-                <option value="weekly">Weekly</option>
+                <option value="one-time">{t("One-Time")}</option>
+                <option value="daily">{t("Daily")}</option>
+                <option value="weekly">{t("Weekly")}</option>
               </select>
             </label>
             <label className="progress-editor-field">
-              <span className="progress-editor-label">Level</span>
+              <span className="progress-editor-label">{t("Level")}</span>
               <select name="level" value={progressLevel} onChange={(event) => setProgressLevel(event.currentTarget.value as "Easy" | "Medium" | "Hard")}>
-                <option>Easy</option>
-                <option>Medium</option>
-                <option>Hard</option>
+                <option value="Easy">{t("Easy")}</option>
+                <option value="Medium">{t("Medium")}</option>
+                <option value="Hard">{t("Hard")}</option>
               </select>
             </label>
             <label className="progress-editor-field">
-              <span className="progress-editor-label">Total coin</span>
-              <div className="task-reward-preview"><span>✦</span><output>{progressLevel === "Easy" ? 10 : progressLevel === "Medium" ? 20 : 30} coin</output></div>
-              <small className="task-reward-hint">Automatically set by level; target achievement adds +10 on completion.</small>
+              <span className="progress-editor-label">{t("Total coin")}</span>
+              <div className="task-reward-preview"><span>✦</span><output>{progressLevel === "Easy" ? 10 : progressLevel === "Medium" ? 20 : 30} {t("coin")}</output></div>
+              <small className="task-reward-hint">{t("Automatically set by level; target achievement adds +10 on completion.")}</small>
             </label>
             <fieldset className="progress-editor-target">
-              <legend className="progress-editor-label">Achievement</legend>
+              <legend className="progress-editor-label">{t("Achievement")}</legend>
               <div className="progress-editor-target-row">
-                <input aria-label="Achievement amount" name="target" type="number" min="0.1" step="any" placeholder="Amount..." value={progressTarget} onChange={(event) => setProgressTarget(event.currentTarget.value)} />
+                <input aria-label={t("Achievement amount")} name="target" type="number" min="0.1" step="any" placeholder={t("Amount...")} value={progressTarget} onChange={(event) => setProgressTarget(event.currentTarget.value)} />
                 <span className="progress-editor-divider">/</span>
-                <select name="unit" aria-label="Achievement unit" value={progressUnit} onChange={(event) => setProgressUnit(event.currentTarget.value)}>
-                  <option value="pages">Pages</option>
+                <select name="unit" aria-label={t("Achievement unit")} value={progressUnit} onChange={(event) => setProgressUnit(event.currentTarget.value)}>
+                  <option value="pages">{t("Pages")}</option>
                   <option value="km">KM</option>
-                  <option value="minutes">Minutes</option>
-                  <option value="reps">Reps</option>
-                  <option value="glasses">Glasses</option>
-                  <option value="times">Times</option>
-                  <option value="custom">Custom</option>
+                  <option value="minutes">{t("Minutes")}</option>
+                  <option value="reps">{t("Reps")}</option>
+                  <option value="glasses">{t("Glasses")}</option>
+                  <option value="times">{t("Times")}</option>
+                  <option value="custom">{t("Custom")}</option>
                 </select>
               </div>
-              {progressUnit === "custom" && <input className="progress-editor-custom-unit" aria-label="Custom achievement unit" name="customUnit" value={progressCustomUnit} onChange={(event) => setProgressCustomUnit(event.currentTarget.value)} placeholder="Enter custom unit" maxLength={24} required={Boolean(progressTarget.trim())} />}
-              <small>Enter a target amount and unit for this quest.</small>
+              {progressUnit === "custom" && <input className="progress-editor-custom-unit" aria-label={t("Custom achievement unit")} name="customUnit" value={progressCustomUnit} onChange={(event) => setProgressCustomUnit(event.currentTarget.value)} placeholder={t("Enter custom unit")} maxLength={24} required={Boolean(progressTarget.trim())} />}
+              <small>{t("Enter a target amount and unit for this challenge.")}</small>
             </fieldset>
-            <button className="progress-editor-update" type="submit">Update <Icon name="check" size={19} /></button>
+            <button className="progress-editor-update" type="submit">{t("Update")} <Icon name="check" size={19} /></button>
           </form>
           {confirmChallengeDelete && <div className="progress-delete-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setConfirmChallengeDelete(false); }}>
             <section className="progress-delete-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-challenge-title">
               <div className="progress-delete-icon"><Icon name="trash" size={22} /></div>
-              <h3 id="delete-challenge-title">Delete this quest?</h3>
-              <p>This removes the challenge and its progress from your journey.</p>
+              <h3 id="delete-challenge-title">{t("Delete this challenge?")}</h3>
+              <p>{t("This removes the challenge and its progress from your journey.")}</p>
               <div className="progress-delete-actions">
-                <button type="button" onClick={() => setConfirmChallengeDelete(false)}>Keep quest</button>
-                <button type="button" onClick={deleteProgressChallenge}>Delete quest</button>
+                <button type="button" onClick={() => setConfirmChallengeDelete(false)}>{t("Keep challenge")}</button>
+                <button type="button" onClick={deleteProgressChallenge}>{t("Delete challenge")}</button>
               </div>
             </section>
           </div>}
@@ -1497,85 +2356,85 @@ export default function DashboardClient({
         <div className="stars stars-one" /><div className="stars stars-two" />
         <section className="profile-content shell" aria-labelledby="profile-title">
           <header className="profile-heading">
-            <button className="profile-back" onClick={() => setProfileOpen(false)} aria-label="Back to journey"><Icon name="back" size={23} /></button>
-            <h1 id="profile-title">Profile</h1>
+            <button className="profile-back" onClick={() => setProfileOpen(false)} aria-label={t("Back to journey")}><Icon name="back" size={23} /></button>
+            <h1 id="profile-title">{t("Profile")}</h1>
             <span className="profile-heading-spacer" />
           </header>
           <section className="profile-identity profile-panel">
-            <div className="profile-avatar-frame"><img src={gender === "woman" ? "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=360&h=360&q=85" : "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=360&h=360&q=85"} alt="Profile avatar" /></div>
-            <div className="profile-identity-copy"><span className="profile-kicker">YOUR COSMIC JOURNEY</span><h2>{profileName}</h2><span className="profile-handle">{email}</span><button className="profile-edit-button" onClick={() => setProfileDialog("edit")}>Edit profile <Icon name="chevron" size={14} /></button></div>
+            <div className="profile-avatar-frame"><img src={gender === "woman" ? "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=360&h=360&q=85" : "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=360&h=360&q=85"} alt={t("Profile avatar")} /></div>
+            <div className="profile-identity-copy"><span className="profile-kicker">{t("YOUR COSMIC JOURNEY")}</span><h2>{profileName}</h2><span className="profile-handle">{email}</span><button className="profile-edit-button" onClick={() => setProfileDialog("edit")}>{t("Edit profile")} <Icon name="chevron" size={14} /></button></div>
             <div className="profile-stats">
-              <div><Icon name="sparkles" size={18} /><span>PHASE 1</span></div>
-              <div><Icon name="trophy" size={18} /><span>{completed} <small>quests</small></span></div>
-              <div><span className="profile-coin">✦</span><span>{coins} <small>stardust</small></span></div>
+              <div><Icon name="sparkles" size={18} /><span>{t("PHASE 1")}</span></div>
+              <div><Icon name="trophy" size={18} /><span>{completed} <small>{t("challenges")}</small></span></div>
+              <div><span className="profile-coin">✦</span><span>{coins} <small>{t("stardust")}</small></span></div>
             </div>
           </section>
           <section className="profile-panel profile-preferences">
-            <span className="profile-section-label">PREFERENCES</span>
-            <div className="profile-preference-row"><span className="profile-row-icon"><Icon name="settings" size={24} /></span><strong>Appearance</strong><div className="appearance-switch" role="group" aria-label="Appearance theme"><button className={profileTheme === "dark" ? "selected" : ""} aria-pressed={profileTheme === "dark"} onClick={() => setProfileTheme("dark")}><Icon name="moon" size={17} /> Dark</button><button className={profileTheme === "light" ? "selected" : ""} aria-pressed={profileTheme === "light"} onClick={() => setProfileTheme("light")}><Icon name="sun" size={17} /> Light</button></div></div>
+            <span className="profile-section-label">{t("PREFERENCES")}</span>
+            <div className="profile-preference-row"><span className="profile-row-icon"><Icon name="settings" size={24} /></span><strong>{t("Appearance")}</strong><div className="appearance-switch" role="group" aria-label={t("Appearance theme")}><button className={profileTheme === "dark" ? "selected" : ""} aria-pressed={profileTheme === "dark"} onClick={() => setProfileTheme("dark")}><Icon name="moon" size={17} /> {t("Dark")}</button><button className={profileTheme === "light" ? "selected" : ""} aria-pressed={profileTheme === "light"} onClick={() => setProfileTheme("light")}><Icon name="sun" size={17} /> {t("Light")}</button></div></div>
           </section>
           <section className="profile-panel">
-            <span className="profile-section-label">ACHIEVEMENTS</span>
-            <button className="profile-action-row certificate-row" disabled={!canClaimCertificate} onClick={() => canClaimCertificate && setCompletionDialog("certificate")}><span className="profile-row-icon"><Icon name="certificate" size={25} /></span><strong>Claim Certificate</strong><span className="certificate-progress">{certificateClaimed ? "CLAIMED" : canClaimCertificate ? "COMPLETE 40 DAYS" : "AVAILABLE ON DAY 40"}</span><Icon name="chevron" size={21} /></button>
+            <span className="profile-section-label">{t("ACHIEVEMENTS")}</span>
+            <button className="profile-action-row certificate-row" disabled={!canClaimCertificate || certificateGenerating} onClick={() => { void claimCompletionCertificate(); }}><span className="profile-row-icon"><Icon name="certificate" size={25} /></span><strong>{t(certificateGenerating ? "Generating certificate..." : certificateClaimed ? "Download certificate again" : "Claim Certificate")}</strong><span className="certificate-progress">{t(certificateClaimed ? "CLAIMED" : canClaimCertificate ? "COMPLETE 40 DAYS" : "AVAILABLE ON DAY 40")}</span><Icon name="chevron" size={21} /></button>
           </section>
           <section className="profile-panel profile-data-panel">
-            <span className="profile-section-label">DATA</span>
-            <button className="profile-action-row reset-row" onClick={() => setProfileDialog("reset")}><span className="profile-row-icon"><Icon name="trash" size={23} /></span><span className="profile-action-copy"><strong>Reset Data</strong><small>Clear your progress and start again from day one.</small></span><Icon name="chevron" size={21} /></button>
+            <span className="profile-section-label">{t("DATA")}</span>
+            <button className="profile-action-row reset-row" onClick={() => setProfileDialog("reset")}><span className="profile-row-icon"><Icon name="trash" size={23} /></span><span className="profile-action-copy"><strong>{t("Reset Data")}</strong><small>{t("Clear your progress and start again from day one.")}</small></span><Icon name="chevron" size={21} /></button>
           </section>
           <section className="profile-panel">
-            <span className="profile-section-label">APP GUIDE</span>
-            <button className={`profile-action-row guide-row ${expandedGuide === "how" ? "expanded" : ""}`} onClick={() => setExpandedGuide((value) => value === "how" ? null : "how")}><span className="profile-row-icon"><Icon name="book" size={24} /></span><strong>How to Use</strong><Icon name="chevron" size={21} /></button>
-            {expandedGuide === "how" && <p className="profile-guide-copy">Choose a day on your 40-day map, complete a small daily quest, and collect stardust as you build consistency. Your progress is saved on this device.</p>}
-            <button className={`profile-action-row guide-row ${expandedGuide === "points" ? "expanded" : ""}`} onClick={() => setExpandedGuide((value) => value === "points" ? null : "points")}><span className="profile-row-icon"><Icon name="star" size={24} /></span><strong>Points Explained</strong><Icon name="chevron" size={21} /></button>
-            {expandedGuide === "points" && <p className="profile-guide-copy">Each completed quest earns the stardust shown on its card. Your balance appears here and on your journey dashboard.</p>}
+            <span className="profile-section-label">{t("APP GUIDE")}</span>
+            <button className={`profile-action-row guide-row ${expandedGuide === "how" ? "expanded" : ""}`} onClick={() => setExpandedGuide((value) => value === "how" ? null : "how")}><span className="profile-row-icon"><Icon name="book" size={24} /></span><strong>{t("How to Use")}</strong><Icon name="chevron" size={21} /></button>
+            {expandedGuide === "how" && <p className="profile-guide-copy">{t("Choose a day on your 40-day map, complete a small daily challenge, and collect stardust as you build consistency. Your progress is saved on this device.")}</p>}
+            <button className={`profile-action-row guide-row ${expandedGuide === "points" ? "expanded" : ""}`} onClick={() => setExpandedGuide((value) => value === "points" ? null : "points")}><span className="profile-row-icon"><Icon name="star" size={24} /></span><strong>{t("Points Explained")}</strong><Icon name="chevron" size={21} /></button>
+            {expandedGuide === "points" && <p className="profile-guide-copy">{t("Each completed challenge earns the stardust shown on its card. Your balance appears here and on your journey dashboard.")}</p>}
           </section>
           <section className="profile-panel">
-            <span className="profile-section-label">SUPPORT</span>
-            <a className="profile-action-row guide-row" href="mailto:hello@joolo.app?subject=JOolo%20support"><span className="profile-row-icon"><Icon name="support" size={24} /></span><strong>Customer Service</strong><Icon name="chevron" size={21} /></a>
-            <button className="profile-action-row guide-row" onClick={() => setProfileDialog("feedback")}><span className="profile-row-icon"><Icon name="message" size={24} /></span><strong>Feedback</strong><Icon name="chevron" size={21} /></button>
+            <span className="profile-section-label">{t("SUPPORT")}</span>
+            <a className="profile-action-row guide-row" href="mailto:hello@joolo.app?subject=JOolo%20support"><span className="profile-row-icon"><Icon name="support" size={24} /></span><strong>{t("Customer Service")}</strong><Icon name="chevron" size={21} /></a>
+            <button className="profile-action-row guide-row" onClick={() => setProfileDialog("feedback")}><span className="profile-row-icon"><Icon name="message" size={24} /></span><strong>{t("Feedback")}</strong><Icon name="chevron" size={21} /></button>
           </section>
-          <button className="profile-logout" onClick={() => setProfileDialog("logout")}><Icon name="logout" size={17} /> Log Out</button>
+          <button className="profile-logout" onClick={() => setProfileDialog("logout")}><Icon name="logout" size={17} /> {t("Log Out")}</button>
           <footer className="profile-version">JOOLO <span>v1.0.0</span><i>✦</i></footer>
         </section>
         {profileDialog && <div className="modal-backdrop profile-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setProfileDialog(null); }}>
           <section className="modal glass-panel profile-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-dialog-title">
-            <button className="modal-close" onClick={() => setProfileDialog(null)} aria-label="Close"><Icon name="close" size={19} /></button>
+            <button className="modal-close" onClick={() => setProfileDialog(null)} aria-label={t("Close")}><Icon name="close" size={19} /></button>
             <div className="modal-icon"><Icon name={profileDialog === "reset" ? "trash" : profileDialog === "certificate" ? "certificate" : profileDialog === "logout" ? "logout" : profileDialog === "feedback" ? "message" : "sparkles"} size={25} /></div>
-            {profileDialog === "edit" && <><span className="eyebrow">MAKE IT YOURS</span><h2 id="profile-dialog-title">Edit your profile.</h2><p>Choose the name you want to see on your journey.</p><form onSubmit={(event) => { event.preventDefault(); const value = String(new FormData(event.currentTarget).get("name") ?? "").trim(); if (value) setProfileName(value); setProfileDialog(null); notify("Profile updated."); }}><label htmlFor="profile-name">Display name</label><input id="profile-name" name="name" defaultValue={profileName} maxLength={32} required /><button className="primary-button submit-button" type="submit">Save profile <Icon name="check" size={16} /></button></form></>}
-            {profileDialog === "reset" && <><span className="eyebrow">A FRESH ORBIT</span><h2 id="profile-dialog-title">Reset your journey?</h2><p>This clears your saved quests, stardust, and preferences on this device. This can’t be undone.</p><div className="profile-dialog-actions"><button className="outline-button" onClick={() => setProfileDialog(null)}>Keep my progress</button><button className="profile-danger-button" onClick={resetJourney}>Reset everything</button></div></>}
-            {profileDialog === "certificate" && <><span className="eyebrow">YOUR NEXT MILESTONE</span><h2 id="profile-dialog-title">Your 40-day orbit awaits.</h2><p>Reach Day 40 and complete all your daily quests to unlock your certificate.</p><button className="primary-button submit-button" onClick={() => { setProfileDialog(null); setProfileOpen(false); setSelectedDay(40); document.getElementById("calendar")?.scrollIntoView({ behavior: "smooth" }); }}>Go to day 40 <Icon name="arrow" size={16} /></button></>}
-            {profileDialog === "feedback" && <><span className="eyebrow">HELP US GROW</span><h2 id="profile-dialog-title">Send a little feedback.</h2><p>What could make your next orbit even better?</p><form onSubmit={(event) => { event.preventDefault(); setProfileDialog(null); notify("Thanks for helping JOolo grow!"); }}><label htmlFor="feedback-message">Your feedback</label><textarea id="feedback-message" name="feedback" rows={4} maxLength={500} placeholder="Share an idea or tell us how it’s going..." required /><button className="primary-button submit-button" type="submit">Send feedback <Icon name="arrow" size={16} /></button></form></>}
-            {profileDialog === "logout" && <><span className="eyebrow">YOUR ACCOUNT</span><h2 id="profile-dialog-title">Ready to head out?</h2><p>You’ll be securely signed out. Your journey progress will stay saved on this device.</p><button className="primary-button submit-button" onClick={logOut}>Log out <Icon name="logout" size={16} /></button></>}
+            {profileDialog === "edit" && <><span className="eyebrow">{t("MAKE IT YOURS")}</span><h2 id="profile-dialog-title">{t("Edit your profile.")}</h2><p>{t("Choose the name you want to see on your journey.")}</p><form onSubmit={(event) => { event.preventDefault(); const value = String(new FormData(event.currentTarget).get("name") ?? "").trim(); if (value) setProfileName(value); setProfileDialog(null); notify("Profile updated."); }}><label htmlFor="profile-name">{t("Display name")}</label><input id="profile-name" name="name" defaultValue={profileName} maxLength={32} required /><button className="primary-button submit-button" type="submit">{t("Save profile")} <Icon name="check" size={16} /></button></form></>}
+            {profileDialog === "reset" && <><span className="eyebrow">{t("A FRESH ORBIT")}</span><h2 id="profile-dialog-title">{t("Reset your journey?")}</h2><p>{t("This clears your saved challenges, stardust, and preferences on this device. This can’t be undone.")}</p><div className="profile-dialog-actions"><button className="outline-button" onClick={() => setProfileDialog(null)}>{t("Keep my progress")}</button><button className="profile-danger-button" onClick={resetJourney}>{t("Reset everything")}</button></div></>}
+            {profileDialog === "certificate" && <><span className="eyebrow">{t("YOUR NEXT MILESTONE")}</span><h2 id="profile-dialog-title">{t("Your 40-day orbit awaits.")}</h2><p>{t("Reach Day 40 and complete all your daily challenges to unlock your certificate.")}</p><button className="primary-button submit-button" onClick={() => { setProfileDialog(null); setProfileOpen(false); setSelectedDay(40); document.getElementById("calendar")?.scrollIntoView({ behavior: "smooth" }); }}>{t("Go to day 40")} <Icon name="arrow" size={16} /></button></>}
+            {profileDialog === "feedback" && <><span className="eyebrow">{t("HELP US GROW")}</span><h2 id="profile-dialog-title">{t("Send a little feedback.")}</h2><p>{t("What could make your next orbit even better?")}</p><form onSubmit={(event) => { event.preventDefault(); setProfileDialog(null); notify("Thanks for helping JOolo grow!"); }}><label htmlFor="feedback-message">{t("Your feedback")}</label><textarea id="feedback-message" name="feedback" rows={4} maxLength={500} placeholder={t("Share an idea or tell us how it’s going...")} required /><button className="primary-button submit-button" type="submit">{t("Send feedback")} <Icon name="arrow" size={16} /></button></form></>}
+            {profileDialog === "logout" && <><span className="eyebrow">{t("YOUR ACCOUNT")}</span><h2 id="profile-dialog-title">{t("Ready to head out?")}</h2><p>{t("You’ll be securely signed out. Your journey progress will stay saved on this device.")}</p><button className="primary-button submit-button" onClick={logOut}>{t("Log out")} <Icon name="logout" size={16} /></button></>}
           </section>
         </div>}
       </div>}
 
       {completionDialog && <div className="modal-backdrop completion-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setCompletionDialog(null); }}>
         <section className="modal glass-panel completion-dialog" role="dialog" aria-modal="true" aria-labelledby="completion-dialog-title">
-          <button className="modal-close" type="button" onClick={() => setCompletionDialog(null)} aria-label="Close"><Icon name="close" size={19} /></button>
+          <button className="modal-close" type="button" onClick={() => setCompletionDialog(null)} aria-label={t("Close")}><Icon name="close" size={19} /></button>
           <div className="modal-icon"><Icon name={completionDialog === "evaluation" ? "sparkles" : "certificate"} size={25} /></div>
           {completionDialog === "evaluation" ? <>
-            <span className="eyebrow">YOUR JOURNEY, REFLECTED</span>
-            <h2 id="completion-dialog-title">40-day evaluation.</h2>
-            <p>You made it to the final day and completed every quest in your challenge.</p>
+            <span className="eyebrow">{t("YOUR JOURNEY, REFLECTED")}</span>
+            <h2 id="completion-dialog-title">{t("40-day evaluation.")}</h2>
+            <p>{t("You made it to the final day and completed every challenge.")}</p>
             <div className="evaluation-stats">
-              <div><span>QUESTS COMPLETED</span><strong>{completed} / {challenges.length}</strong></div>
-              <div><span>STARDUST EARNED</span><strong>✦ {completedStardust.toLocaleString()}</strong></div>
-              <div><span>JOURNEY</span><strong>40 days</strong></div>
+              <div><span>{t("CHALLENGES COMPLETED")}</span><strong>{completedPhaseQuests.length} / {phaseDailyQuests.length}</strong></div>
+              <div><span>{t("STARDUST EARNED")}</span><strong>✦ {completedStardust.toLocaleString()}</strong></div>
+              <div><span>{t("JOURNEY")}</span><strong>{t("40 days")}</strong></div>
             </div>
             <div className="evaluation-quest-list">{challenges.map((challenge) => <div key={challenge.id}><span className="evaluation-check"><Icon name="check" size={14} /></span><span>{challenge.title}</span><strong>✦ {challenge.reward}</strong></div>)}</div>
-            <button className="primary-button submit-button" type="button" onClick={() => setCompletionDialog(null)}>Celebrate your progress <Icon name="sparkles" size={16} /></button>
+            <button className="primary-button submit-button" type="button" onClick={() => setCompletionDialog(null)}>{t("Celebrate your progress")} <Icon name="sparkles" size={16} /></button>
           </> : <>
-            <span className="eyebrow">A MILESTONE WORTH CELEBRATING</span>
+            <span className="eyebrow">{t("A MILESTONE WORTH CELEBRATING")}</span>
             <div className="claimed-certificate">
               <span className="certificate-star">✦</span>
-              <span className="certificate-overline">JOOLO · CERTIFICATE OF COMPLETION</span>
-              <h2 id="completion-dialog-title">{certificateClaimed ? "Certificate claimed!" : "Congratulations!"}</h2>
-              <p>This recognizes <strong>{profileName}</strong> for completing the 40-day cosmic growth challenge.</p>
-              <span className="certificate-days">40 DAYS · {completed} QUESTS COMPLETE</span>
+              <span className="certificate-overline">{t("JOOLO · CERTIFICATE OF COMPLETION")}</span>
+              <h2 id="completion-dialog-title">{t(certificateClaimed ? "Certificate claimed!" : "Congratulations!")}</h2>
+              <p>{t("This recognizes ")}<strong>{profileName}</strong>{t(" for completing the 40-day cosmic growth challenge.")}</p>
+              <span className="certificate-days">{t("40 DAYS · CHALLENGE COMPLETE")}</span>
             </div>
-            <p className="certificate-claim-note">{certificateClaimed ? "Your milestone is saved in your journey on this device." : "Your 40-day journey is complete. This certificate has been added to your milestones."}</p>
-            <button className="primary-button submit-button" type="button" onClick={() => setCompletionDialog(null)}>Continue your journey <Icon name="arrow" size={16} /></button>
+            <p className="certificate-claim-note">{t(certificateClaimed ? "Your milestone is saved in your journey on this device." : "Your 40-day journey is complete. This certificate has been added to your milestones.")}</p>
+            <button className="primary-button submit-button" type="button" onClick={() => { void claimCompletionCertificate(); }}>{t("Download certificate again")} <Icon name="certificate" size={16} /></button>
           </>}
         </section>
       </div>}
@@ -1583,28 +2442,28 @@ export default function DashboardClient({
       {bonusOpen && <div className="bonus-screen">
         <div className="stars stars-one" /><div className="stars stars-two" />
         <header className="topbar shell bonus-topbar">
-          <a href="#top" className="brand" onClick={(event) => { event.preventDefault(); setBonusOpen(false); }} aria-label="JOolo home"><span className="brand-mark">✦</span><span>JO<span className="brand-muted">O</span>LO<span className="brand-dot">.</span></span></a>
-          <nav className="main-nav" aria-label="Main navigation">
-            <button className="nav-link" onClick={() => { setBonusOpen(false); setLeaderboardOpen(true); }}>Leaderboard</button>
-            <button className="nav-link" onClick={() => { setBonusOpen(false); jumpToChallenges(); }}>Challenge</button>
-            <button className="nav-link active bonus-nav-active" aria-current="page">Bonus</button>
+          <a href="#top" className="brand" onClick={(event) => { event.preventDefault(); setBonusOpen(false); }} aria-label={t("JOolo home")}><span className="brand-mark">✦</span><span>JO<span className="brand-muted">O</span>LO<span className="brand-dot">.</span></span></a>
+          <nav className="main-nav" aria-label={t("Main navigation")}>
+            <button className="nav-link" onClick={() => { setBonusOpen(false); setLeaderboardOpen(true); }}>{t("Leaderboard")}</button>
+            <button className="nav-link" onClick={() => { setBonusOpen(false); jumpToChallenges(); }}>{t("Challenge")}</button>
+            <button className="nav-link active bonus-nav-active" aria-current="page">{t("Bonus")}</button>
           </nav>
-          <div className="header-actions"><button className="icon-button language-button" onClick={() => notify("Language: English")} aria-label="Language"><Icon name="globe" size={19} /></button><button className="icon-button" onClick={openProfile} aria-label="Profile"><Icon name="user" size={21} /></button></div>
+          <div className="header-actions">{languageSelector}<button className="icon-button" onClick={openProfile} aria-label={t("Profile")}><Icon name="user" size={21} /></button></div>
         </header>
         <main className="bonus-content shell" aria-labelledby="bonus-title">
           <div className="bonus-title-row">
-            <div><span className="eyebrow"><span className="eyebrow-line" /> YOUR COSMIC TOOLKIT</span><h1 id="bonus-title">Download <span>Bonus</span></h1><p>Helpful little tools for the person you’re becoming.</p></div>
+            <div><span className="eyebrow"><span className="eyebrow-line" /> {t("YOUR COSMIC TOOLKIT")}</span><h1 id="bonus-title">{t("Download ")}<span>{t("Bonus")}</span></h1><p>{t("Helpful little tools for the person you’re becoming.")}</p></div>
             <div className="bonus-heading-actions">
-              {isAdmin && <a className="bonus-admin-link" href="/admin">Manage bonuses <Icon name="arrow" size={15} /></a>}
-              <button className={`bonus-search-toggle ${bonusSearchOpen ? "is-open" : ""}`} onClick={() => { setBonusSearchOpen((open) => !open); setBonusSearch(""); }} aria-label={bonusSearchOpen ? "Close search" : "Search bonuses"}><Icon name={bonusSearchOpen ? "close" : "search"} size={23} /></button>
+              {isAdmin && <a className="bonus-admin-link" href="/admin">{t("Manage bonuses")} <Icon name="arrow" size={15} /></a>}
+              <button className={`bonus-search-toggle ${bonusSearchOpen ? "is-open" : ""}`} onClick={() => { setBonusSearchOpen((open) => !open); setBonusSearch(""); }} aria-label={t(bonusSearchOpen ? "Close search" : "Search bonuses")}><Icon name={bonusSearchOpen ? "close" : "search"} size={23} /></button>
             </div>
           </div>
-          {bonusSearchOpen && <label className="bonus-search-field"><Icon name="search" size={17} /><input autoFocus value={bonusSearch} onChange={(event) => setBonusSearch(event.target.value)} placeholder="Search guides and trackers..." aria-label="Search bonus resources" /></label>}
-          <div className="bonus-tabs" role="tablist" aria-label="Bonus resource type">
-            <button className={bonusType === "ebook" ? "selected" : ""} role="tab" aria-selected={bonusType === "ebook"} onClick={() => setBonusType("ebook")}>E-BOOK</button>
-            <button className={bonusType === "tracker" ? "selected" : ""} role="tab" aria-selected={bonusType === "tracker"} onClick={() => setBonusType("tracker")}>TRACKER</button>
+          {bonusSearchOpen && <label className="bonus-search-field"><Icon name="search" size={17} /><input autoFocus value={bonusSearch} onChange={(event) => setBonusSearch(event.target.value)} placeholder={t("Search guides and trackers...")} aria-label={t("Search bonus resources")} /></label>}
+          <div className="bonus-tabs" role="tablist" aria-label={t("Bonus resource type")}>
+            <button className={bonusType === "ebook" ? "selected" : ""} role="tab" aria-selected={bonusType === "ebook"} onClick={() => setBonusType("ebook")}>{t("E-BOOK")}</button>
+            <button className={bonusType === "tracker" ? "selected" : ""} role="tab" aria-selected={bonusType === "tracker"} onClick={() => setBonusType("tracker")}>{t("TRACKER")}</button>
           </div>
-          <section className="bonus-resource-list" aria-label={bonusType === "ebook" ? "E-book downloads" : "Tracker downloads"}>
+          <section className="bonus-resource-list" aria-label={t(bonusType === "ebook" ? "E-book downloads" : "Tracker downloads")}>
             {visibleUploadedResources.map((resource) => <article className="bonus-resource-card" key={resource.id}>
               <div className={`bonus-cover ${bonusType}`} style={{ backgroundImage: `linear-gradient(180deg,rgba(5,13,22,.02),rgba(6,13,23,.34)),url("${resource.image_url}")` }}>
                 <span className="bonus-cover-brand">✦ JOOLO</span>
@@ -1612,12 +2471,12 @@ export default function DashboardClient({
                 <span className="bonus-file-badge">{bonusType === "ebook" ? "PDF" : "XLSX"}</span>
               </div>
               <div className="bonus-resource-info">
-                <span className="bonus-category">{bonusType === "ebook" ? "E-BOOK" : "TRACKER"}</span>
+                <span className="bonus-category">{t(bonusType === "ebook" ? "E-BOOK" : "TRACKER")}</span>
                 <h2>{resource.title}</h2>
                 <p>{resource.description}</p>
                 <span className="bonus-resource-meta">{bonusType === "ebook" ? "PDF · Google Drive" : "Excel · Google Drive"}</span>
                 <a className="bonus-download-button" href={resource.download_url} target="_blank" rel="noreferrer">
-                  DOWNLOAD {bonusType === "ebook" ? "PDF" : "EXCEL"} <Icon name="arrow" size={16} />
+                  {t("DOWNLOAD ")}{bonusType === "ebook" ? "PDF" : t("EXCEL")} <Icon name="arrow" size={16} />
                 </a>
               </div>
             </article>)}
@@ -1627,51 +2486,51 @@ export default function DashboardClient({
                 <span className="bonus-cover-title">{resource.title}</span>
                 {bonusType === "tracker" && <span className="bonus-file-badge">XLSX</span>}
               </div>
-              <div className="bonus-resource-info"><span className="bonus-category">{resource.category}</span><h2>{resource.title}</h2><p>{resource.description}</p><span className="bonus-resource-meta">{resource.detail}</span><button className="bonus-download-button" onClick={() => { void downloadBonus(resource, bonusType).catch((error: unknown) => { console.error("Unable to create bonus download", error); notify("Download couldn’t be created. Please try again."); }); }}>{bonusType === "ebook" ? "DOWNLOAD PDF" : "DOWNLOAD XLSX"} <Icon name="arrow" size={16} /></button></div>
+              <div className="bonus-resource-info"><span className="bonus-category">{t(resource.category)}</span><h2>{t(resource.title)}</h2><p>{t(resource.description)}</p><span className="bonus-resource-meta">{t(resource.detail)}</span><button className="bonus-download-button" onClick={() => { void downloadBonus(resource, bonusType).catch((error: unknown) => { console.error("Unable to create bonus download", error); notify("Download couldn’t be created. Please try again."); }); }}>{t("DOWNLOAD ")}{bonusType === "ebook" ? "PDF" : "XLSX"} <Icon name="arrow" size={16} /></button></div>
             </article>)}
-            {visibleBonusResources.length + visibleUploadedResources.length === 0 && <div className="bonus-empty"><Icon name="search" size={23} /><strong>No resources found in this orbit.</strong><span>Try a different title or category.</span><button onClick={() => setBonusSearch("")}>Clear search</button></div>}
+            {visibleBonusResources.length + visibleUploadedResources.length === 0 && <div className="bonus-empty"><Icon name="search" size={23} /><strong>{t("No resources found in this orbit.")}</strong><span>{t("Try a different title or category.")}</span><button onClick={() => setBonusSearch("")}>{t("Clear search")}</button></div>}
           </section>
-          <footer className="bonus-footer"><span>✦ Made for your becoming</span><button onClick={() => setBonusOpen(false)}>Back to your journey ↑</button></footer>
+          <footer className="bonus-footer"><span>✦ {t("Made for your becoming")}</span><button onClick={() => setBonusOpen(false)}>{t("Back to your journey ↑")}</button></footer>
         </main>
       </div>}
 
       {leaderboardOpen && <div className="leaderboard-screen">
         <div className="stars stars-one" /><div className="stars stars-two" />
         <header className="topbar shell leaderboard-topbar">
-          <a href="#top" className="brand" onClick={(event) => { event.preventDefault(); setLeaderboardOpen(false); }} aria-label="JOolo home"><span className="brand-mark">✦</span><span>JO<span className="brand-muted">O</span>LO<span className="brand-dot">.</span></span></a>
-          <nav className="main-nav" aria-label="Main navigation">
-            <button className="nav-link active leaderboard-nav-active" onClick={() => setLeaderboardOpen(false)}>Leaderboard</button>
-            <button className="nav-link" onClick={() => { setLeaderboardOpen(false); jumpToChallenges(); }}>Challenge</button>
-            <button className="nav-link" onClick={() => { setLeaderboardOpen(false); setBonusOpen(true); }}>Bonus</button>
+          <a href="#top" className="brand" onClick={(event) => { event.preventDefault(); setLeaderboardOpen(false); }} aria-label={t("JOolo home")}><span className="brand-mark">✦</span><span>JO<span className="brand-muted">O</span>LO<span className="brand-dot">.</span></span></a>
+          <nav className="main-nav" aria-label={t("Main navigation")}>
+            <button className="nav-link active leaderboard-nav-active" onClick={() => setLeaderboardOpen(false)}>{t("Leaderboard")}</button>
+            <button className="nav-link" onClick={() => { setLeaderboardOpen(false); jumpToChallenges(); }}>{t("Challenge")}</button>
+            <button className="nav-link" onClick={() => { setLeaderboardOpen(false); setBonusOpen(true); }}>{t("Bonus")}</button>
           </nav>
-          <div className="header-actions"><button className="icon-button" onClick={() => notify("Language: English")} aria-label="Language"><Icon name="globe" size={19} /></button><button className="icon-button" onClick={openProfile} aria-label="Profile"><Icon name="user" size={21} /></button></div>
+          <div className="header-actions">{languageSelector}<button className="icon-button" onClick={openProfile} aria-label={t("Profile")}><Icon name="user" size={21} /></button></div>
         </header>
         <main className="leaderboard-content shell" aria-labelledby="leaderboard-title">
-          <div className="leaderboard-heading"><span className="eyebrow"><span className="eyebrow-line" /> THE COSMIC COMMUNITY</span><h1 id="leaderboard-title">Find your <span>orbit.</span></h1><p>Every small step deserves a little stardust.</p></div>
-          <div className="leaderboard-tabs" role="tablist" aria-label="Leaderboard period">
-            {(["daily", "weekly", "phase"] as const).map((period) => <button key={period} className={leaderboardPeriod === period ? "selected" : ""} role="tab" aria-selected={leaderboardPeriod === period} onClick={() => { setLeaderboardPeriod(period); setLeaderboardPage(0); }}>{period}</button>)}
+          <div className="leaderboard-heading"><span className="eyebrow"><span className="eyebrow-line" /> {t("THE COSMIC COMMUNITY")}</span><h1 id="leaderboard-title">{t("Find your ")}<span>{t("orbit.")}</span></h1><p>{t("Every small step deserves a little stardust.")}</p></div>
+          <div className="leaderboard-tabs" role="tablist" aria-label={t("Leaderboard period")}>
+            {(["daily", "weekly", "phase"] as const).map((period) => <button key={period} className={leaderboardPeriod === period ? "selected" : ""} role="tab" aria-selected={leaderboardPeriod === period} onClick={() => { setLeaderboardPeriod(period); setLeaderboardPage(0); }}>{t(period)}</button>)}
           </div>
-          {leaderboardPeriod === "phase" ? <section className="phase-progress-dashboard" aria-label="40-day progress dashboard">
+          {leaderboardPeriod === "phase" ?           <section className="phase-progress-dashboard" aria-label={t("40-day progress dashboard")}>
             <div className="phase-progress-heading">
               <div>
-                <span className="eyebrow"><span className="eyebrow-line" /> YOUR 40-DAY JOURNEY</span>
-                <h2>Progress <span>in orbit.</span></h2>
-                <p>Track your daily stardust and compare it with today’s Daily leaderboard leaders.</p>
+                <span className="eyebrow"><span className="eyebrow-line" /> {t("YOUR 40-DAY JOURNEY")}</span>
+                <h2>{t("Progress ")}<span>{t("in orbit.")}</span></h2>
+                <p>{t("Track your daily stardust and compare it with today’s Daily leaderboard leaders.")}</p>
               </div>
               <div className="phase-progress-stats">
-                <div><span>STARDUST EARNED</span><strong>✦ {userTotalRecordedStardust.toLocaleString()}</strong></div>
-                <div><span>DAY {selectedDay} SCORE</span><strong>✦ {(dailyStardustByDay[String(selectedDay)] ?? 0).toLocaleString()}</strong></div>
+                <div><span>{t("STARDUST EARNED")}</span><strong>✦ {userTotalRecordedStardust.toLocaleString()}</strong></div>
+                <div><span>{t("DAY ")}{selectedDay} {t("SCORE")}</span><strong>✦ {(dailyStardustByDay[String(selectedDay)] ?? 0).toLocaleString()}</strong></div>
               </div>
             </div>
             <div className="progress-chart-panel">
               <div className="progress-chart-topline">
-                <div><span className="chart-kicker">DAILY STARDUST</span><h3>Day-by-day progress</h3></div>
-                <span className="chart-unit">STARDUST / DAY</span>
+                <div><span className="chart-kicker">{t("DAILY STARDUST")}</span><h3>{t("Day-by-day progress")}</h3></div>
+                <span className="chart-unit">{t("STARDUST / DAY")}</span>
               </div>
               <div className="progress-chart-scroll">
                 <svg className="progress-chart" viewBox="0 0 930 345" role="img" aria-labelledby="progress-chart-title progress-chart-description">
-                  <title id="progress-chart-title">Daily stardust progress over 40 challenge days</title>
-                  <desc id="progress-chart-description">Your recorded daily stardust is shown with a cyan line. Gold, pink, and purple horizontal lines show current daily benchmark scores for the top three leaderboard players.</desc>
+                  <title id="progress-chart-title">{t("Daily stardust progress over 40 challenge days")}</title>
+                  <desc id="progress-chart-description">{t("Your recorded daily stardust is shown with a cyan line. Gold, pink, and purple horizontal lines show current daily benchmark scores for the top three leaderboard players.")}</desc>
                   {Array.from({ length: 6 }, (_, index) => {
                     const score = Math.round((chartYMax / 5) * (5 - index));
                     const y = chartBounds.top + (chartBounds.height / 5) * index;
@@ -1682,7 +2541,7 @@ export default function DashboardClient({
                   })}
                   {[1, 5, 10, 15, 20, 25, 30, 35, 40].map((day) => <g key={`x-${day}`}>
                     <line className="chart-x-tick" x1={chartX(day)} x2={chartX(day)} y1={chartBounds.top + chartBounds.height} y2={chartBounds.top + chartBounds.height + 5} />
-                    <text className="chart-axis-label" x={chartX(day)} y={chartBounds.top + chartBounds.height + 23} textAnchor="middle">Day {day}</text>
+                    <text className="chart-axis-label" x={chartX(day)} y={chartBounds.top + chartBounds.height + 23} textAnchor="middle">{t("Day ")}{day}</text>
                   </g>)}
                   <line className="chart-axis-line" x1={chartBounds.left} x2={chartBounds.left} y1={chartBounds.top} y2={chartBounds.top + chartBounds.height} />
                   <line className="chart-axis-line" x1={chartBounds.left} x2={chartBounds.left + chartBounds.width} y1={chartBounds.top + chartBounds.height} y2={chartBounds.top + chartBounds.height} />
@@ -1704,53 +2563,53 @@ export default function DashboardClient({
                   </circle>)}
                 </svg>
               </div>
-              <div className="chart-legend" aria-label="Chart lines">
-                <span className="chart-legend-item chart-user-legend"><i /> You · daily stardust</span>
+              <div className="chart-legend" aria-label={t("Chart lines")}>
+                <span className="chart-legend-item chart-user-legend"><i /> {t("You · daily stardust")}</span>
                 {dailyLeaders.map((leader, index) => <span className={`chart-legend-item chart-leader-legend leader-benchmark-${index + 1}`} key={leader.handle}>
-                  <i /> #{index + 1} {leader.handle} · {leader.daily.toLocaleString()} benchmark
+                  <i /> #{index + 1} {leader.handle} · {leader.daily.toLocaleString()} {t("benchmark")}
                 </span>)}
               </div>
-              <p className="chart-data-note">Your line records stardust from quests you complete from now on; unrecorded days are left blank. Leader lines are today’s Daily scores used as comparison benchmarks, not historical records.</p>
+              <p className="chart-data-note">{t("Your line records stardust from challenges you complete from now on; unrecorded days are left blank. Leader lines are today’s Daily scores used as comparison benchmarks, not historical records.")}</p>
             </div>
           </section> : <>
-            <section className="podium" aria-label="Top three players">
+            <section className="podium" aria-label={t("Top three players")}>
               {[{ leader: topLeaders[1], rank: 2 }, { leader: topLeaders[0], rank: 1 }, { leader: topLeaders[2], rank: 3 }].map(({ leader, rank }) => <article className={`podium-player podium-${rank}`} key={leader.handle}>
                 <div className="podium-rank">{rank === 1 && <span className="crown">♛</span>}{rank}</div>
                 <div className="podium-avatar-wrap"><img src={`https://images.unsplash.com/${leader.avatar}?auto=format&fit=crop&w=240&h=240&q=80`} alt="" className="podium-avatar" /><span className="avatar-glow" /></div>
-                <strong>{leader.handle}</strong><span className="podium-title">{leader.title}</span>
+                <strong>{leader.handle}</strong><span className="podium-title">{t(leader.title)}</span>
                 <div className="podium-score"><span className="leader-coin">✦</span>{leader[leaderboardPeriod].toLocaleString()}</div>
               </article>)}
             </section>
-            <section className="leader-list" aria-label="Leaderboard ranks">
+            <section className="leader-list" aria-label={t("Leaderboard ranks")}>
               {pageLeaders.map((leader, index) => {
                 const rank = index + 4 + leaderboardPage * 7;
                 const isYou = leader.handle === "@you";
                 return <article className={`leader-list-row ${isYou ? "you" : ""}`} key={leader.handle}>
                   <span className="list-rank">{rank}</span>
                   <img className="list-avatar" src={`https://images.unsplash.com/${leader.avatar}?auto=format&fit=crop&w=100&h=100&q=75`} alt="" />
-                  <span className="list-player">{leader.handle}<small>{isYou ? "Your cosmic journey" : leader.title}</small></span>
+                  <span className="list-player">{leader.handle}<small>{isYou ? t("Your cosmic journey") : t(leader.title)}</small></span>
                   <span className="list-score"><span className="leader-coin">✦</span><b>{leader[leaderboardPeriod].toLocaleString()}</b></span>
                 </article>;
               })}
             </section>
             <div className="leaderboard-pagination">
-              {leaderboardPage > 0 && <button className="page-button previous" onClick={() => setLeaderboardPage((page) => Math.max(0, page - 1))}><Icon name="arrow" size={17} /> PREVIOUS</button>}
-              <span>PAGE {leaderboardPage + 1} <i /> 2</span>
-              {leaderboardPage === 0 && <button className="page-button" onClick={() => setLeaderboardPage(1)}>NEXT <Icon name="arrow" size={17} /></button>}
-              {leaderboardPage === 1 && <button className="page-button" onClick={() => { setLeaderboardOpen(false); jumpToChallenges(); }}>BACK TO QUESTS <Icon name="arrow" size={17} /></button>}
+              {leaderboardPage > 0 && <button className="page-button previous" onClick={() => setLeaderboardPage((page) => Math.max(0, page - 1))}><Icon name="arrow" size={17} /> {t("PREVIOUS")}</button>}
+              <span>{t("PAGE ")}{leaderboardPage + 1} <i /> 2</span>
+              {leaderboardPage === 0 && <button className="page-button" onClick={() => setLeaderboardPage(1)}>{t("NEXT")} <Icon name="arrow" size={17} /></button>}
+              {leaderboardPage === 1 && <button className="page-button" onClick={() => { setLeaderboardOpen(false); jumpToChallenges(); }}>{t("BACK TO CHALLENGES")} <Icon name="arrow" size={17} /></button>}
             </div>
           </>}
         </main>
       </div>}
       {journeyDatePickerOpen && <div className="modal-backdrop start-date-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setJourneyDatePickerOpen(false); }}>
         <section className="modal glass-panel start-date-dialog" role="dialog" aria-modal="true" aria-labelledby="start-date-title">
-          <button className="modal-close" type="button" onClick={() => setJourneyDatePickerOpen(false)} aria-label="Close date picker"><Icon name="close" size={19} /></button>
+          <button className="modal-close" type="button" onClick={() => setJourneyDatePickerOpen(false)} aria-label={t("Close date picker")}><Icon name="close" size={19} /></button>
           <div className="modal-icon"><Icon name="calendar" size={25} /></div>
-          <span className="eyebrow">YOUR 40-DAY CHALLENGE</span>
-          <h2 id="start-date-title">Input your challenge start date.</h2>
-          <p>Tanggal ini tersimpan di akun Supabase dan menandai hari pertama challenge 40 hari Anda.</p>
+          <span className="eyebrow">{t("YOUR 40-DAY CHALLENGE")}</span>
+          <h2 id="start-date-title">{t("Input your challenge start date.")}</h2>
+          <p>{t("This date is saved to your Supabase account and marks the first day of your 40-day challenge.")}</p>
           <form onSubmit={saveJourneyStartDate}>
-            <label htmlFor="journey-start-date">CHALLENGE START DATE</label>
+            <label htmlFor="journey-start-date">{t("CHALLENGE START DATE")}</label>
             <input
               id="journey-start-date"
               type="date"
@@ -1761,8 +2620,8 @@ export default function DashboardClient({
             />
             {journeyDateError && <p className="start-date-error" role="alert">{journeyDateError}</p>}
             <div className="start-date-dialog-actions">
-              <button className="outline-button" type="button" onClick={() => setJourneyDatePickerOpen(false)} disabled={journeyDateSaving}>Cancel</button>
-              <button className="primary-button" type="submit" disabled={journeyDateSaving}>{journeyDateSaving ? "Saving..." : "Save start date"} <Icon name="check" size={16} /></button>
+              <button className="outline-button" type="button" onClick={() => setJourneyDatePickerOpen(false)} disabled={journeyDateSaving}>{t("Cancel")}</button>
+              <button className="primary-button" type="submit" disabled={journeyDateSaving}>{journeyDateSaving ? t("Saving...") : t("Save start date")} <Icon name="check" size={16} /></button>
             </div>
           </form>
         </section>
