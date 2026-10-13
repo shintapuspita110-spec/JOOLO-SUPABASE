@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { UploadedBonusResource, BonusType } from "@/lib/bonus";
 
@@ -43,12 +43,29 @@ export default function AdminClient({
   const [resources, setResources] = useState(initialResources);
   const [coinTestUsers, setCoinTestUsers] = useState(initialCoinTestUsers);
   const [coinTestUserDraft, setCoinTestUserDraft] = useState(newCoinTestUserDraft);
+  const [coinTestUserSearch, setCoinTestUserSearch] = useState("");
+  const [coinTestUserGenderFilter, setCoinTestUserGenderFilter] = useState<"all" | "woman" | "man">("all");
+  const [coinTestUserSort, setCoinTestUserSort] = useState<"name" | "daily" | "weekly">("name");
   const [busy, setBusy] = useState(false);
   const [coinTestUsersBusy, setCoinTestUsersBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [coinTestUsersMessage, setCoinTestUsersMessage] = useState("");
   const [coinTestUsersError, setCoinTestUsersError] = useState("");
+  const coinTestUserFormRef = useRef<HTMLFormElement>(null);
+  const coinTestUserNameInputRef = useRef<HTMLInputElement>(null);
+  const visibleCoinTestUsers = useMemo(() => {
+    const search = coinTestUserSearch.trim().toLocaleLowerCase("id-ID");
+    return coinTestUsers
+      .filter((testUser) =>
+        testUser.display_name.toLocaleLowerCase("id-ID").includes(search)
+        && (coinTestUserGenderFilter === "all" || testUser.gender === coinTestUserGenderFilter))
+      .sort((first, second) => {
+        if (coinTestUserSort === "daily") return second.daily_coin - first.daily_coin || first.display_name.localeCompare(second.display_name, "id");
+        if (coinTestUserSort === "weekly") return second.weekly_coin - first.weekly_coin || first.display_name.localeCompare(second.display_name, "id");
+        return first.display_name.localeCompare(second.display_name, "id");
+      });
+  }, [coinTestUsers, coinTestUserGenderFilter, coinTestUserSearch, coinTestUserSort]);
 
   async function refreshCoinTestUsers() {
     const { data, error } = await createClient().rpc("get_coin_leaderboard_test_users");
@@ -152,6 +169,8 @@ export default function AdminClient({
       dailyCoin: String(testUser.daily_coin),
       weeklyCoin: String(testUser.weekly_coin),
     });
+    coinTestUserFormRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    window.requestAnimationFrame(() => coinTestUserNameInputRef.current?.focus({ preventScroll: true }));
   }
 
   async function uploadResource(event: FormEvent<HTMLFormElement>) {
@@ -335,9 +354,10 @@ export default function AdminClient({
             )}
           </div>
           <p className="admin-test-users-note">Kelola nama dan total koin uji. Perubahan skor langsung memengaruhi peringkat Daily dan Weekly.</p>
-          <form className="admin-form admin-test-user-form" onSubmit={(event) => { void saveCoinTestUser(event); }}>
+          <form ref={coinTestUserFormRef} className="admin-form admin-test-user-form" onSubmit={(event) => { void saveCoinTestUser(event); }}>
             <label htmlFor="coin-test-name">DISPLAY NAME</label>
             <input
+              ref={coinTestUserNameInputRef}
               id="coin-test-name"
               type="text"
               maxLength={60}
@@ -408,8 +428,51 @@ export default function AdminClient({
           {coinTestUsers.length === 0 ? (
             <p className="admin-empty">Belum ada pengguna uji. Tambahkan pengguna melalui formulir di atas.</p>
           ) : (
-            <div className="admin-test-user-list">
-              {coinTestUsers.map((testUser) => (
+            <>
+              <div className="admin-test-user-filters">
+                <label className="admin-test-user-search">
+                  <span>CARI PENGGUNA</span>
+                  <input
+                    type="search"
+                    value={coinTestUserSearch}
+                    onChange={(event) => setCoinTestUserSearch(event.currentTarget.value)}
+                    placeholder="Cari berdasarkan nama..."
+                    aria-label="Cari pengguna uji berdasarkan nama"
+                  />
+                </label>
+                <label>
+                  <span>FILTER GENDER</span>
+                  <select
+                    value={coinTestUserGenderFilter}
+                    onChange={(event) => setCoinTestUserGenderFilter(event.currentTarget.value === "man" || event.currentTarget.value === "woman" ? event.currentTarget.value : "all")}
+                    aria-label="Filter pengguna uji berdasarkan gender"
+                  >
+                    <option value="all">Semua gender</option>
+                    <option value="woman">Woman</option>
+                    <option value="man">Man</option>
+                  </select>
+                </label>
+                <label>
+                  <span>URUTKAN</span>
+                  <select
+                    value={coinTestUserSort}
+                    onChange={(event) => setCoinTestUserSort(event.currentTarget.value === "daily" || event.currentTarget.value === "weekly" ? event.currentTarget.value : "name")}
+                    aria-label="Urutkan pengguna uji"
+                  >
+                    <option value="name">Nama A–Z</option>
+                    <option value="daily">Daily coins terbanyak</option>
+                    <option value="weekly">Weekly coins terbanyak</option>
+                  </select>
+                </label>
+              </div>
+              <p className="admin-test-users-count" role="status">
+                Menampilkan {visibleCoinTestUsers.length} dari {coinTestUsers.length} pengguna
+              </p>
+              {visibleCoinTestUsers.length === 0 ? (
+                <p className="admin-empty">Tidak ada pengguna yang cocok dengan pencarian atau filter.</p>
+              ) : (
+                <div className="admin-test-user-list">
+              {visibleCoinTestUsers.map((testUser) => (
                 <article className="admin-test-user-item" key={testUser.user_id}>
                   <img src={testUser.avatar_url} alt="" />
                   <div className="admin-test-user-copy">
@@ -423,7 +486,9 @@ export default function AdminClient({
                   </div>
                 </article>
               ))}
-            </div>
+                </div>
+              )}
+            </>
           )}
         </section>
 

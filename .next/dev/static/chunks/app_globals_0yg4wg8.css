@@ -6691,6 +6691,59 @@ h1, h2, h3, p {
   display: flex;
 }
 
+.admin-test-user-filters {
+  grid-template-columns: minmax(180px, 1fr) minmax(145px, .55fr) minmax(190px, .75fr);
+  align-items: end;
+  gap: 11px;
+  margin: 20px 0 8px;
+  display: grid;
+}
+
+.admin-test-user-filters label {
+  gap: 7px;
+  min-width: 0;
+  display: grid;
+}
+
+.admin-test-user-filters label > span {
+  color: #b8c6d8;
+  letter-spacing: 1.1px;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.admin-test-user-filters input, .admin-test-user-filters select {
+  color: #effaff;
+  background: #050d1aad;
+  border: 1px solid #8facc942;
+  border-radius: 9px;
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 12px;
+  font-size: 11px;
+}
+
+.admin-test-user-filters select option {
+  color: #effaff;
+  background: #101b2e;
+}
+
+.admin-test-user-filters input:focus, .admin-test-user-filters select:focus {
+  border-color: #5cf2e2bf;
+  outline: 0;
+  box-shadow: 0 0 0 3px #5cf2e214;
+}
+
+.admin-test-users-count {
+  color: #8798b0;
+  margin: 0 0 10px;
+  font-size: 10px;
+}
+
+.admin-test-user-form {
+  scroll-margin-block: 30px;
+}
+
 @media (max-width: 700px) {
   .bonus-heading-actions {
     gap: 8px;
@@ -6708,6 +6761,14 @@ h1, h2, h3, p {
 
   .admin-panel, .admin-resource-section {
     padding: 21px;
+  }
+
+  .admin-test-user-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-test-user-search {
+    grid-column: 1 / -1;
   }
 }
 
@@ -6819,6 +6880,15 @@ h1, h2, h3, p {
 
   .admin-test-score-fields input {
     padding-inline: 9px;
+  }
+
+  .admin-test-user-filters {
+    grid-template-columns: 1fr;
+    gap: 9px;
+  }
+
+  .admin-test-user-search {
+    grid-column: auto;
   }
 }
 
