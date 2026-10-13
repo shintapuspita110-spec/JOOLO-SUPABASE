@@ -1373,69 +1373,196 @@ h1, h2, h3, p {
   margin-bottom: 17px;
 }
 
-.evaluation-stats {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin: 16px 0;
+.certificate-confirmation-backdrop {
+  z-index: 12;
+  overflow-y: auto;
+}
+
+.certificate-confirmation-dialog {
+  flex-direction: column;
+  gap: 20px;
+  width: min(1040px, 100%);
+  height: min(92svh, 900px);
+  max-height: 92svh;
+  padding: 29px;
+  display: flex;
+  overflow-y: auto;
+}
+
+.certificate-confirmation-copy {
+  flex: none;
+  min-width: 0;
+  padding: 3px 5px 3px 0;
+}
+
+.certificate-confirmation-copy h2 {
+  letter-spacing: -.8px;
+  margin: 9px 0;
+  font: 700 25px Manrope, sans-serif;
+}
+
+.certificate-confirmation-copy > p {
+  color: #98a8be;
+  margin: 0 0 14px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.certificate-review-name {
+  background: #f5c9780e;
+  border: 1px solid #f5c97845;
+  border-radius: 11px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 12px;
+  margin: 15px 0;
+  padding: 13px;
   display: grid;
 }
 
-.evaluation-stats > div {
-  background: #07111e80;
+.certificate-review-name > span {
+  color: #bca16c;
+  letter-spacing: .8px;
+  text-transform: uppercase;
+  grid-column: 1 / -1;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.certificate-review-name > strong {
+  overflow-wrap: anywhere;
+  color: #fff1cf;
+  align-self: center;
+  font-size: 14px;
+}
+
+.certificate-review-name > button {
+  color: #9debe3;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  padding: 5px 0;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.certificate-review-scores h3 {
+  color: #dce8f8;
+  margin: 16px 0 8px;
+  font: 700 12px Manrope, sans-serif;
+}
+
+.certificate-review-table-wrap {
   border: 1px solid #8fabc72b;
   border-radius: 10px;
-  padding: 11px 9px;
+  max-height: 228px;
+  overflow: auto;
 }
 
-.evaluation-stats span {
-  color: #8fa1b9;
-  letter-spacing: .75px;
-  font-size: 7px;
-  font-weight: 700;
-  display: block;
+.certificate-review-table-wrap table {
+  border-collapse: collapse;
+  text-align: left;
+  width: 100%;
 }
 
-.evaluation-stats strong {
-  color: #e8f7ff;
-  margin-top: 7px;
-  font: 700 13px Manrope, sans-serif;
-  display: block;
+.certificate-review-table-wrap th, .certificate-review-table-wrap td {
+  border-bottom: 1px solid #8fabc71f;
+  padding: 8px;
+  font-size: 9px;
 }
 
-.evaluation-quest-list {
-  gap: 7px;
-  margin: 15px 0 18px;
-  display: grid;
+.certificate-review-table-wrap thead th {
+  color: #9aa8c2;
+  letter-spacing: .35px;
+  background: #101b2e;
+  font-size: 8px;
+  position: sticky;
+  top: 0;
 }
 
-.evaluation-quest-list > div {
-  color: #c7d3e3;
-  background: #0914237a;
-  border: 1px solid #8fabc71f;
-  border-radius: 8px;
-  align-items: center;
-  gap: 9px;
-  min-height: 37px;
-  padding: 7px 9px;
-  font-size: 10px;
-  display: flex;
+.certificate-review-table-wrap tbody th {
+  color: #dce8f8;
+  min-width: 150px;
+  font-weight: 600;
 }
 
-.evaluation-check {
-  width: 21px;
-  height: 21px;
-  color: var(--cyan);
-  background: #5cf2e21f;
-  border-radius: 50%;
-  place-items: center;
-  display: grid;
-}
-
-.evaluation-quest-list > div > strong {
-  color: #f1d38d;
+.certificate-review-table-wrap td {
   white-space: nowrap;
-  margin-left: auto;
+  color: #bdc8da;
+}
+
+.certificate-preview-note {
+  margin: 12px 0 !important;
+  font-size: 10px !important;
+}
+
+.certificate-confirmation-actions {
+  z-index: 2;
+  background: #101b2e;
+  border-top: 1px solid #8fabc72b;
+  gap: 9px;
+  margin: 0;
+  padding: 12px 0 0;
+  display: flex;
+  position: sticky;
+  bottom: -29px;
+}
+
+.certificate-confirmation-actions > * {
+  flex: 1;
+  justify-content: center;
+  min-height: 42px;
+  margin: 0;
+  padding: 10px;
   font-size: 10px;
+}
+
+.certificate-preview-pane {
+  background: #080f1c;
+  border: 1px solid #5cf2e233;
+  border-radius: 13px;
+  flex-direction: column;
+  flex: none;
+  width: 100%;
+  height: 72svh;
+  min-height: 500px;
+  display: flex;
+  position: relative;
+  overflow: hidden;
+}
+
+.certificate-preview-pane iframe {
+  background: #080f1c;
+  border: 0;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+}
+
+.certificate-preview-badge {
+  z-index: 1;
+  color: #f5d895;
+  letter-spacing: .7px;
+  pointer-events: none;
+  background: #080f1ce6;
+  border: 1px solid #f5c97866;
+  border-radius: 8px;
+  padding: 7px 9px;
+  font-size: 8px;
+  font-weight: 800;
+  position: absolute;
+  top: 12px;
+  left: 12px;
+}
+
+.certificate-preview-loading {
+  color: #9aa8c2;
+  text-align: center;
+  flex: 1;
+  place-items: center;
+  min-height: 0;
+  padding: 20px;
+  font-size: 12px;
+  display: grid;
 }
 
 .claimed-certificate {
@@ -5630,6 +5757,84 @@ h1, h2, h3, p {
     margin-top: 24px;
     padding-top: 16px;
   }
+}
+
+@media (max-width: 900px) {
+  .certificate-confirmation-dialog {
+    gap: 14px;
+    width: min(740px, 100%);
+    height: 92svh;
+    padding: 22px;
+    overflow-y: auto;
+  }
+
+  .certificate-confirmation-copy {
+    flex: none;
+  }
+
+  .certificate-preview-pane {
+    height: 62svh;
+    min-height: 380px;
+  }
+
+  .certificate-review-table-wrap {
+    max-height: 190px;
+  }
+}
+
+@media (max-width: 560px) {
+  .certificate-confirmation-dialog {
+    gap: 11px;
+    height: 92svh;
+    padding: 23px 16px;
+  }
+
+  .certificate-confirmation-copy h2 {
+    font-size: 21px;
+  }
+
+  .certificate-confirmation-copy > p {
+    font-size: 11px;
+  }
+
+  .certificate-review-name {
+    margin: 11px 0;
+    padding: 10px;
+  }
+
+  .certificate-review-table-wrap th, .certificate-review-table-wrap td {
+    padding: 6px;
+    font-size: 8px;
+  }
+
+  .certificate-review-table-wrap thead th {
+    font-size: 7px;
+  }
+
+  .certificate-review-table-wrap tbody th {
+    min-width: 112px;
+  }
+
+  .certificate-confirmation-actions {
+    gap: 7px;
+    padding-top: 9px;
+    bottom: -23px;
+  }
+
+  .certificate-confirmation-actions > * {
+    font-size: 9px;
+  }
+
+  .certificate-preview-pane {
+    height: 58svh;
+    min-height: 340px;
+  }
+
+  .certificate-preview-badge {
+    font-size: 7px;
+    top: 8px;
+    left: 8px;
+  }
 
   .day-40-actions {
     gap: 9px;
@@ -5641,23 +5846,6 @@ h1, h2, h3, p {
     min-height: 50px;
     padding: 11px 10px;
     font-size: 12px;
-  }
-
-  .evaluation-stats {
-    gap: 5px;
-  }
-
-  .evaluation-stats > div {
-    padding: 9px 6px;
-  }
-
-  .evaluation-stats span {
-    letter-spacing: .45px;
-    font-size: 6px;
-  }
-
-  .evaluation-stats strong {
-    font-size: 11px;
   }
 
   .completion-dialog {

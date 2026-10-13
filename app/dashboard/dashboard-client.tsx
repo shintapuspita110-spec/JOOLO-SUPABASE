@@ -15,7 +15,7 @@ type LeaderboardPeriod = "daily" | "weekly" | "phase";
 type Leader = { handle: string; title: string; avatar: string; daily: number; weekly: number; phase: number };
 type BonusResource = { title: string; category: string; description: string; detail: string; image: string; rows?: string[][] };
 type ProfileDialog = "edit" | "reset" | "certificate" | "feedback" | "logout" | null;
-type CompletionDialog = "evaluation" | "certificate" | null;
+type CompletionDialog = "certificate" | null;
 type ProfileTheme = "dark" | "light";
 type SoftSkillAssessment = {
   skillCategoryId: string;
@@ -24,13 +24,140 @@ type SoftSkillAssessment = {
   maxPossibleCoin: number;
 };
 const certificateSkillOrder = [
-  { skillCategoryId: "SKILL_01", softSkills: "Self-Awareness, Emotional Regulation, & Personal Accountability" },
-  { skillCategoryId: "SKILL_02", softSkills: "System Thinking, Discipline, & Operational Efficiency" },
-  { skillCategoryId: "SKILL_03", softSkills: "Focus Mastery, Task Initiation, & Time Management" },
-  { skillCategoryId: "SKILL_04", softSkills: "Resilience, Cognitive Flexibility, & Emotional Boundaries" },
-  { skillCategoryId: "SKILL_05", softSkills: "Growth Mindset, Risk Appetite, & Decision-Making" },
-  { skillCategoryId: "SKILL_06", softSkills: "Strategic Planning, Sustainability, & Self-Governance" },
+  {
+    skillCategoryId: "SKILL_01",
+    softSkills: "Self-Awareness, Emotional Regulation, & Personal Accountability",
+    labelBaseline: 370.48,
+    labelValue: "Self-Awareness, Emotional Regulation, & Personal",
+    continuationBaseline: 355.85,
+    continuationLabel: "Accountability",
+    earnedScoreBaseline: 370.09,
+    earnedScoreFieldX: 501.82,
+    maximumScoreBaseline: 370.48,
+    percentageBaseline: 370.48,
+    scoreCenter: 508.4,
+  },
+  {
+    skillCategoryId: "SKILL_02",
+    softSkills: "System Thinking, Discipline, & Operational Efficiency",
+    labelBaseline: 330.73,
+    earnedScoreBaseline: 330.34,
+    earnedScoreFieldX: 501.82,
+    maximumScoreBaseline: 330.73,
+    percentageBaseline: 330.73,
+    scoreCenter: 508.4,
+  },
+  {
+    skillCategoryId: "SKILL_03",
+    softSkills: "Focus Mastery, Task Initiation, & Time Management",
+    labelBaseline: 290.98,
+    earnedScoreBaseline: 290.59,
+    earnedScoreFieldX: 501.82,
+    maximumScoreBaseline: 290.98,
+    percentageBaseline: 290.98,
+    scoreCenter: 508.4,
+  },
+  {
+    skillCategoryId: "SKILL_05",
+    softSkills: "Growth Mindset, Risk Appetite, & Decision-Making",
+    labelBaseline: 251.23,
+    earnedScoreBaseline: 250.84,
+    earnedScoreFieldX: 500.64,
+    maximumScoreBaseline: 251.23,
+    percentageBaseline: 251.23,
+    scoreCenter: 507.22,
+  },
+  {
+    skillCategoryId: "SKILL_04",
+    softSkills: "Resilience, Cognitive Flexibility, & Emotional Boundaries",
+    labelBaseline: 211.48,
+    earnedScoreBaseline: 211.09,
+    earnedScoreFieldX: 496.61,
+    maximumScoreBaseline: 211.48,
+    percentageBaseline: 211.48,
+    scoreCenter: 506.49,
+  },
+  {
+    skillCategoryId: "SKILL_06",
+    softSkills: "Strategic Planning, Sustainability, & Self-Governance",
+    labelBaseline: 171.73,
+    earnedScoreBaseline: 171.34,
+    earnedScoreFieldX: 501.33,
+    maximumScoreBaseline: 171.73,
+    percentageBaseline: 171.73,
+    scoreCenter: 507.91,
+  },
 ] as const;
+type CertificateAssessmentRow = (typeof certificateSkillOrder)[number] & {
+  assessment: SoftSkillAssessment;
+};
+type ClaimedCertificate = {
+  verificationCode: string;
+  issuedAt: string;
+  fullName: string;
+  assessmentRows: CertificateAssessmentRow[];
+};
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseCertificateAssessmentRows(value: unknown): CertificateAssessmentRow[] {
+  if (!Array.isArray(value) || value.length !== certificateSkillOrder.length) {
+    throw new Error("Supabase returned an invalid saved certificate assessment");
+  }
+  const savedAssessments = new Map<string, SoftSkillAssessment>();
+  for (const item of value) {
+    if (
+      !isRecord(item)
+      || typeof item.skillCategoryId !== "string"
+      || typeof item.softSkills !== "string"
+      || typeof item.earnedCoin !== "number"
+      || !Number.isFinite(item.earnedCoin)
+      || typeof item.maxPossibleCoin !== "number"
+      || !Number.isFinite(item.maxPossibleCoin)
+    ) {
+      throw new Error("Supabase returned an invalid saved certificate assessment");
+    }
+    const { skillCategoryId, softSkills, earnedCoin, maxPossibleCoin } = item;
+    const configuredSkill = certificateSkillOrder.find((skill) => skill.skillCategoryId === skillCategoryId);
+    if (
+      !configuredSkill
+      || configuredSkill.softSkills !== softSkills
+      || earnedCoin < 0
+      || maxPossibleCoin < 0
+      || savedAssessments.has(skillCategoryId)
+    ) {
+      throw new Error("Supabase returned an inconsistent saved certificate assessment");
+    }
+    savedAssessments.set(skillCategoryId, { skillCategoryId, softSkills, earnedCoin, maxPossibleCoin });
+  }
+  return certificateSkillOrder.map((skill) => {
+    const assessment = savedAssessments.get(skill.skillCategoryId);
+    if (!assessment) throw new Error(`Saved certificate assessment is missing ${skill.skillCategoryId}`);
+    return { ...skill, assessment };
+  });
+}
+
+function parseClaimedCertificate(value: unknown): ClaimedCertificate {
+  if (
+    !isRecord(value)
+    || typeof value.verification_code !== "string"
+    || !/^JOOLO\/40DC\/[IVX]+\/\d{4}\/\d{5,}$/.test(value.verification_code)
+    || typeof value.issued_at !== "string"
+    || !Number.isFinite(Date.parse(value.issued_at))
+    || typeof value.certificate_name !== "string"
+    || !value.certificate_name.trim()
+  ) {
+    throw new Error("Supabase returned an invalid saved certificate record");
+  }
+  return {
+    verificationCode: value.verification_code,
+    issuedAt: value.issued_at,
+    fullName: value.certificate_name,
+    assessmentRows: parseCertificateAssessmentRows(value.assessment_snapshot),
+  };
+}
+
 type ProcessedChallengeLives = {
   lives: number;
   life_reset: boolean;
@@ -83,9 +210,6 @@ const indonesianTranslations: Record<string, string> = {
   "You’ll be securely signed out. Your journey progress will stay saved on this device.": "Anda akan keluar dengan aman. Progres perjalanan tetap tersimpan di perangkat ini.",
   "Log out": "Keluar",
   "Close": "Tutup",
-  "YOUR JOURNEY, REFLECTED": "REFLEKSI PERJALANAN ANDA",
-  "40-day evaluation.": "Evaluasi 40 hari.",
-  "You made it to the final day and completed every challenge.": "Anda telah mencapai hari terakhir dan menyelesaikan semua tantangan.",
   "Download couldn’t be created. Please try again.": "Unduhan gagal dibuat. Silakan coba lagi.",
   "Progress ": "Progres ",
   "in orbit.": "perjalanan.",
@@ -109,7 +233,6 @@ const indonesianTranslations: Record<string, string> = {
   "DOWNLOAD XLSX": "UNDUH XLSX",
   "PDF · Google Drive": "PDF · Google Drive",
   "Excel · Google Drive": "Excel · Google Drive",
-  "Your 40-day evaluation results": "Hasil evaluasi 40 hari",
   "benchmark": "pembanding",
   "Your daily leaderboard": "Papan peringkat harian Anda",
   "Daily stardust progress over 40 challenge days": "Progres koin harian selama 40 hari tantangan",
@@ -167,9 +290,7 @@ const indonesianTranslations: Record<string, string> = {
   "40-day challenge completion": "Penyelesaian tantangan 40 hari",
   "Complete all daily challenges to unlock these actions.": "Selesaikan semua tantangan harian untuk membuka fitur ini.",
   "Complete at least one challenge on each of the 40 days to unlock these actions.": "Selesaikan minimal satu tantangan pada setiap hari selama 40 hari untuk membuka fitur ini.",
-  "View your 40-day evaluation results": "Lihat hasil evaluasi 40 hari",
   "Complete all challenges to unlock": "Selesaikan semua tantangan untuk membuka",
-  "40-Day Evaluation Results": "Hasil Evaluasi 40 Hari",
   "Claim your completion certificate": "Klaim sertifikat penyelesaian",
   "Certificate Claimed": "Sertifikat Diklaim",
   "Claim Certificate": "Klaim Sertifikat",
@@ -268,13 +389,13 @@ const indonesianTranslations: Record<string, string> = {
   "YOUR 40-DAY JOURNEY": "PERJALANAN 40 HARI ANDA",
   "Progress in orbit.": "Progres perjalanan.",
   "Track your daily stardust and compare it with today’s Daily leaderboard leaders.": "Pantau koin harian Anda dan bandingkan dengan peringkat teratas hari ini.",
-  "STARDUST EARNED": "KOIN TERKUMPUL",
   "DAILY STARDUST": "KOIN HARIAN",
   "Day-by-day progress": "Progres hari demi hari",
   "STARDUST / DAY": "KOIN / HARI",
   "Chart lines": "Garis grafik",
   "You · daily stardust": "Anda · koin harian",
   "Your line records stardust from challenges you complete from now on; unrecorded days are left blank. Leader lines are today’s Daily scores used as comparison benchmarks, not historical records.": "Garis Anda mencatat koin dari tantangan yang diselesaikan mulai sekarang; hari tanpa catatan dibiarkan kosong. Garis peringkat menunjukkan skor harian saat ini sebagai pembanding, bukan riwayat.",
+  "STARDUST EARNED": "KOIN TERKUMPUL",
   "Top three players": "Tiga pemain teratas",
   "Leaderboard ranks": "Peringkat",
   "Your cosmic journey": "Perjalanan Anda",
@@ -288,12 +409,7 @@ const indonesianTranslations: Record<string, string> = {
   "CHALLENGE START DATE": "TANGGAL MULAI TANTANGAN",
   "Cancel": "Batal",
   "Save start date": "Simpan tanggal mulai",
-  "40-day evaluation results": "Hasil evaluasi 40 hari",
-  "YOUR 40-DAY EVALUATION": "EVALUASI 40 HARI ANDA",
-  "CHALLENGES COMPLETED": "TANTANGAN SELESAI",
-  "JOURNEY": "PERJALANAN",
   "40 days": "40 hari",
-  "Celebrate your progress": "Rayakan progres Anda",
   "A MILESTONE WORTH CELEBRATING": "PENCAPAIAN YANG PATUT DIRAYAKAN",
   "JOOLO · CERTIFICATE OF COMPLETION": "JOOLO · SERTIFIKAT PENYELESAIAN",
   "Certificate claimed!": "Sertifikat berhasil diklaim!",
@@ -333,7 +449,23 @@ const indonesianTranslations: Record<string, string> = {
   "Page 2 of 2": "Halaman 2 dari 2",
   "Claim certificate": "Klaim sertifikat",
   "Download certificate again": "Unduh sertifikat lagi",
+  "Certificate already claimed": "Sertifikat sudah diklaim",
+  "The original certificate details are unavailable, so it cannot be safely regenerated.": "Detail sertifikat asli tidak tersedia, jadi sertifikat tidak dapat dibuat ulang dengan aman.",
+  "Certificate status could not be verified. Please try again later.": "Status sertifikat tidak dapat diverifikasi. Silakan coba lagi nanti.",
   "Generating certificate...": "Membuat sertifikat...",
+  "Review your certificate": "Periksa sertifikat Anda",
+  "This certificate can only be claimed once. Before you confirm, check that your full name and all scores are correct.": "Sertifikat ini hanya dapat diklaim satu kali. Sebelum mengonfirmasi, pastikan nama lengkap dan semua skor sudah sesuai.",
+  "Full name on certificate": "Nama lengkap pada sertifikat",
+  "Edit full name": "Ubah nama lengkap",
+  "Your soft-skill scores": "Skor soft skills Anda",
+  "PREVIEW ONLY · NOT ISSUED": "PRATINJAU · BELUM DITERBITKAN",
+  "The preview shows the name and scores that will be issued. The final download will include its official issue date and certificate ID.": "Pratinjau menampilkan nama dan skor yang akan diterbitkan. File akhir akan dilengkapi tanggal terbit resmi dan ID sertifikat.",
+  "Cancel claim": "Batal klaim",
+  "Confirm and download certificate": "Konfirmasi dan unduh sertifikat",
+  "Preparing certificate preview...": "Menyiapkan pratinjau sertifikat...",
+  "Certificate preview": "Pratinjau sertifikat",
+  "Name and scores": "Nama dan skor",
+  "You are about to claim your certificate once. Confirm that the name and scores shown above are correct.": "Anda akan mengklaim sertifikat satu kali. Pastikan nama dan skor yang ditampilkan di atas sudah benar.",
   "40-day certificate": "Sertifikat 40 hari",
   "All challenge data was reset because your lives ran out. Your challenge restarts today.": "Semua data tantangan diatur ulang karena nyawa Anda habis. Tantangan dimulai kembali hari ini.",
   "Challenge progress could not be saved: daily challenge was not found.": "Progres tantangan gagal disimpan: tantangan harian tidak ditemukan.",
@@ -408,6 +540,7 @@ function translate(text: string, language: Language) {
     ["Your saved phase challenge progress could not be reset: ", "Progres tantangan fase tersimpan gagal diatur ulang: "],
     ["Challenge progress was reset, but your coin balance could not be refreshed: ", "Progres tantangan diatur ulang, tetapi saldo koin gagal diperbarui: "],
     ["Your daily challenge progress could not be saved: ", "Progres tantangan harian Anda gagal disimpan: "],
+    ["Certificate preview could not be prepared: ", "Pratinjau sertifikat gagal disiapkan: "],
     ["Certificate could not be generated: ", "Sertifikat gagal dibuat: "],
   ];
   const errorPrefix = errorPrefixes.find(([prefix]) => text.startsWith(prefix));
@@ -685,7 +818,12 @@ export default function DashboardClient({
   const [confirmChallengeDelete, setConfirmChallengeDelete] = useState(false);
   const [completionDialog, setCompletionDialog] = useState<CompletionDialog>(null);
   const [certificateClaimed, setCertificateClaimed] = useState(false);
+  const [certificateStatusLoaded, setCertificateStatusLoaded] = useState(false);
+  const [claimedCertificate, setClaimedCertificate] = useState<ClaimedCertificate | null>(null);
   const [certificateGenerating, setCertificateGenerating] = useState(false);
+  const [certificateConfirmationOpen, setCertificateConfirmationOpen] = useState(false);
+  const [certificatePreviewUrl, setCertificatePreviewUrl] = useState<string | null>(null);
+  const [certificatePreviewRows, setCertificatePreviewRows] = useState<CertificateAssessmentRow[]>([]);
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
   const [bonusOpen, setBonusOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -721,7 +859,6 @@ export default function DashboardClient({
   useEffect(() => {
     setGender(readStored<Gender>("joolo-gender", "woman", userId));
     setChallenges(readStored<Challenge[]>("joolo-challenges", initialChallenges, userId));
-    setCertificateClaimed(readStored<boolean>("joolo-certificate-claimed", false, userId));
     setJourneyStartDate(initialStartDate);
     setCoins(initialCoins);
     setDailyStardustByDay(readStored<Record<string, number>>("joolo-daily-stardust", {}, userId));
@@ -736,13 +873,59 @@ export default function DashboardClient({
     if (!hydrated) return;
     localStorage.setItem(`${userId}:joolo-gender`, JSON.stringify(gender));
     localStorage.setItem(`${userId}:joolo-challenges`, JSON.stringify(challenges));
-    localStorage.setItem(`${userId}:joolo-certificate-claimed`, JSON.stringify(certificateClaimed));
     localStorage.setItem(`${userId}:joolo-daily-stardust`, JSON.stringify(dailyStardustByDay));
     localStorage.setItem(`${userId}:joolo-challenge-completion-days`, JSON.stringify(challengeCompletionDays));
     localStorage.setItem(`${userId}:joolo-profile-name`, JSON.stringify(profileName));
     localStorage.setItem(`${userId}:joolo-profile-theme`, JSON.stringify(profileTheme));
     localStorage.setItem(`${userId}:joolo-language`, JSON.stringify(language));
-  }, [gender, challenges, certificateClaimed, dailyStardustByDay, challengeCompletionDays, coins, profileName, profileTheme, language, hydrated, userId]);
+  }, [gender, challenges, dailyStardustByDay, challengeCompletionDays, coins, profileName, profileTheme, language, hydrated, userId]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    setCertificateStatusLoaded(false);
+    let active = true;
+
+    async function loadClaimedCertificate() {
+      try {
+        const { data, error } = await createClient().rpc("get_40_day_certificate");
+        if (error) throw new Error(error.message);
+        const records = Array.isArray(data) ? data : data ? [data] : [];
+        if (records.length > 1) throw new Error("Supabase returned multiple certificate records for one user");
+        if (!active) return;
+        if (records.length === 0) {
+          setCertificateClaimed(false);
+          setClaimedCertificate(null);
+          setCertificateStatusLoaded(true);
+          return;
+        }
+
+        const record = records[0];
+        if (!isRecord(record)) throw new Error("Supabase returned an invalid certificate record");
+        setCertificateClaimed(true);
+        if (record.assessment_snapshot === null || typeof record.certificate_name !== "string" || !record.certificate_name.trim()) {
+          setClaimedCertificate(null);
+        } else {
+          setClaimedCertificate(parseClaimedCertificate(record));
+        }
+        setCertificateStatusLoaded(true);
+      } catch (error) {
+        if (!active) return;
+        console.error("Unable to verify claimed certificate status", error);
+        notify("Certificate status could not be verified. Please try again later.", 10000);
+      }
+    }
+
+    void loadClaimedCertificate();
+    return () => {
+      active = false;
+    };
+  }, [hydrated, userId]);
+
+  useEffect(() => {
+    return () => {
+      if (certificatePreviewUrl) URL.revokeObjectURL(certificatePreviewUrl);
+    };
+  }, [certificatePreviewUrl]);
 
   useEffect(() => {
     if (!hydrated || livesProcessingRef.current) return;
@@ -776,12 +959,10 @@ export default function DashboardClient({
           setUserDailyQuests([]);
           setUserQuestProgressDrafts({});
           setChallenges(initialChallenges);
-          setCertificateClaimed(false);
           setDailyStardustByDay({});
           setChallengeCompletionDays({});
           [
             "joolo-challenges",
-            "joolo-certificate-claimed",
             "joolo-daily-stardust",
             "joolo-challenge-completion-days",
             "joolo-coins",
@@ -876,11 +1057,6 @@ export default function DashboardClient({
   );
   const canClaimCertificate = Array.from({ length: 40 }, (_, index) => index + 1)
     .every((day) => completedPhaseDays.has(day));
-  const completedPhaseQuests = phaseDailyQuests.filter((quest) => completedPhaseQuestIds.includes(quest.id));
-  const completedStardust = completedPhaseQuests.reduce(
-    (total, quest) => total + (phaseQuestProgressById[quest.id]?.earned_coin ?? quest.total_coin),
-    0,
-  );
   const progress = Math.round((completed / Math.max(activeChallenges.length, 1)) * 100);
   const rankedLeaders = useMemo(
     () => [...leaderboard].sort((a, b) => b[leaderboardPeriod] - a[leaderboardPeriod]),
@@ -925,24 +1101,54 @@ export default function DashboardClient({
     window.setTimeout(() => setToast(""), duration);
   }
 
-  async function claimCompletionCertificate() {
-    if (!canClaimCertificate || certificateGenerating) return;
-    setCertificateGenerating(true);
-    try {
-      const supabase = createClient();
-      const { data: certificateData, error: certificateError } = await supabase.rpc("issue_40_day_certificate");
-      if (certificateError) throw new Error(`Could not issue certificate: ${certificateError.message}`);
-      const certificate = Array.isArray(certificateData) ? certificateData[0] : certificateData;
-      if (
-        !certificate
-        || typeof certificate.verification_code !== "string"
-        || !/^JOOLO\/40DC\/[IVX]+\/\d{4}\/\d{5,}$/.test(certificate.verification_code)
-        || typeof certificate.issued_at !== "string"
-        || !Number.isFinite(Date.parse(certificate.issued_at))
-      ) {
-        throw new Error("Supabase returned an invalid certificate verification record");
+  function getCertificateAssessmentRows(): CertificateAssessmentRow[] {
+    const certificateSkillsById = new Map<string, (typeof certificateSkillOrder)[number]>(
+      certificateSkillOrder.map((skill) => [skill.skillCategoryId, skill] as const),
+    );
+    const assessmentsBySkill = new Map<string, SoftSkillAssessment>();
+    for (const quest of phaseDailyQuests) {
+      const configuredSkill = certificateSkillsById.get(quest.skill_category_id);
+      if (!configuredSkill) {
+        throw new Error(`The certificate template does not include skill category ${quest.skill_category_id}`);
       }
+      const softSkills = quest.soft_skills.trim();
+      if (softSkills !== configuredSkill.softSkills) {
+        throw new Error(`Skill ${quest.skill_category_id} has an unexpected soft-skill name`);
+      }
+      const assessment = assessmentsBySkill.get(quest.skill_category_id) ?? {
+        skillCategoryId: quest.skill_category_id,
+        softSkills,
+        earnedCoin: 0,
+        maxPossibleCoin: 0,
+      };
+      if (assessment.softSkills !== softSkills) {
+        throw new Error(`Skill ${quest.skill_category_id} has inconsistent soft-skill names`);
+      }
+      const questProgress = phaseQuestProgressById[quest.id];
+      assessment.earnedCoin += questProgress?.completed_at ? questProgress.earned_coin : 0;
+      assessment.maxPossibleCoin += quest.max_possible_coin;
+      assessmentsBySkill.set(quest.skill_category_id, assessment);
+    }
+    if (assessmentsBySkill.size !== certificateSkillOrder.length) {
+      throw new Error("The certificate template requires all six configured soft-skill categories");
+    }
+    return certificateSkillOrder.map((skill) => {
+      const { skillCategoryId, softSkills } = skill;
+      const assessment = assessmentsBySkill.get(skillCategoryId);
+      if (!assessment || assessment.softSkills !== softSkills) {
+        throw new Error(`The certificate template is missing configured category ${skillCategoryId}`);
+      }
+      return { ...skill, assessment };
+    });
+  }
 
+  async function buildCompletionCertificatePdf(
+    verificationCode: string,
+    issuedAtValue: string,
+    assessmentRows: CertificateAssessmentRow[],
+    preview = false,
+    certificateName = profileName.trim() || email || "JOolo member",
+  ) {
       const templateResponse = await fetch("/certificates/joolo-40-day-template-clean.pdf");
       if (!templateResponse.ok) {
         throw new Error(`Could not load certificate design: HTTP ${templateResponse.status}`);
@@ -968,16 +1174,13 @@ export default function DashboardClient({
         .replaceAll("·", "-")
         .replaceAll("–", "-")
         .replace(/[^\x20-\x7E]/g, " ");
-      const issuedAt = new Date(certificate.issued_at);
-      const issuedDate = issuedAt.toLocaleDateString("id-ID", {
+      const issuedDate = preview ? "PREVIEW ONLY" : new Date(issuedAtValue).toLocaleDateString("id-ID", {
         day: "2-digit",
         month: "long",
         year: "numeric",
         timeZone: "Asia/Jakarta",
       }).toLocaleUpperCase("id-ID");
-      const verificationCode = certificate.verification_code;
-      const name = profileName.trim() || email || "JOolo member";
-      const safeName = pdfText(name);
+      const safeName = pdfText(certificateName);
       const nameFontSize = Math.min(42, 345 / nameFont.widthOfTextAtSize(safeName, 42) * 42);
       certificatePage.drawRectangle({ x: 323, y: 337, width: 196, height: 53, color: darkBackground });
       certificatePage.drawText(safeName, {
@@ -1007,43 +1210,7 @@ export default function DashboardClient({
         color: rgb(0.62, 0.69, 0.8),
       });
 
-      const certificateSkillsById = new Map<string, (typeof certificateSkillOrder)[number]>(
-        certificateSkillOrder.map((skill) => [skill.skillCategoryId, skill] as const),
-      );
-      const assessmentsBySkill = new Map<string, SoftSkillAssessment>();
-      for (const quest of phaseDailyQuests) {
-        const configuredSkill = certificateSkillsById.get(quest.skill_category_id);
-        if (!configuredSkill) {
-          throw new Error(`The certificate template does not include skill category ${quest.skill_category_id}`);
-        }
-        const softSkills = quest.soft_skills.trim();
-        if (softSkills !== configuredSkill.softSkills) {
-          throw new Error(`Skill ${quest.skill_category_id} has an unexpected soft-skill name`);
-        }
-        const assessment = assessmentsBySkill.get(quest.skill_category_id) ?? {
-          skillCategoryId: quest.skill_category_id,
-          softSkills,
-          earnedCoin: 0,
-          maxPossibleCoin: 0,
-        };
-        if (assessment.softSkills !== softSkills) {
-          throw new Error(`Skill ${quest.skill_category_id} has inconsistent soft-skill names`);
-        }
-        const questProgress = phaseQuestProgressById[quest.id];
-        assessment.earnedCoin += questProgress?.completed_at ? questProgress.earned_coin : 0;
-        assessment.maxPossibleCoin += quest.max_possible_coin;
-        assessmentsBySkill.set(quest.skill_category_id, assessment);
-      }
-      if (assessmentsBySkill.size !== certificateSkillOrder.length) {
-        throw new Error("The certificate template requires all six configured soft-skill categories");
-      }
-      const assessments = certificateSkillOrder.map(({ skillCategoryId, softSkills }) => {
-        const assessment = assessmentsBySkill.get(skillCategoryId);
-        if (!assessment || assessment.softSkills !== softSkills) {
-          throw new Error(`The certificate template is missing configured category ${skillCategoryId}`);
-        }
-        return assessment;
-      });
+      const assessments = assessmentRows.map(({ assessment }) => assessment);
       const totals = assessments.reduce(
         (total, assessment) => ({
           earnedCoin: total.earnedCoin + assessment.earnedCoin,
@@ -1061,37 +1228,54 @@ export default function DashboardClient({
         throw new Error("The certificate assessment page has an unsupported PDF content layout");
       }
       const streamText = new TextDecoder().decode(decodePDFRawStream(contentStream).decode());
-      const skillLabelBaselines = [370.48, 330.73, 290.98, 258.54, 211.48, 171.73];
-      const skillLabelReplacements = assessments.map((assessment, index) => ({
-        y: skillLabelBaselines[index],
-        value: assessment.softSkills,
-      }));
-      skillLabelReplacements.push({ y: 243.91, value: "" });
-      const skillLabelReplacementCounts = new Map(
-        skillLabelReplacements.map((replacement) => [replacement, 0]),
-      );
+      const skillLabelReplacements: { y: number; value: string }[] = assessmentRows.flatMap((row) => {
+          const labelValue = "labelValue" in row ? row.labelValue : row.assessment.softSkills;
+          const label = {
+            y: row.labelBaseline,
+            value: labelValue,
+          };
+          if (!("continuationBaseline" in row)) return [label];
+          return [
+            label,
+            {
+              y: row.continuationBaseline,
+              value: row.continuationLabel,
+            },
+          ];
+        });
       const encodePdfText = (value: string) =>
         Array.from(value, (character) => character.charCodeAt(0).toString(16).padStart(4, "0")).join("");
+      const skillLabelPattern =
+        /(1 0 0 1 120 ([\d.]+) Tm\s*)(?:<[\dA-Fa-f]*>\s*Tj|\[[\s\S]*?\]\s*TJ)/g;
+      const skillLabelFields = Array.from(streamText.matchAll(skillLabelPattern)).filter(([, , yText]) => {
+        const baseline = Number(yText);
+        return baseline >= 160 && baseline <= 390;
+      });
+      if (skillLabelFields.length !== skillLabelReplacements.length) {
+        throw new Error(
+          `The certificate template must contain ${skillLabelReplacements.length} skill-name fields; found ${skillLabelFields.length}`,
+        );
+      }
+      const skillLabelReplacementByOffset = new Map(
+        [...skillLabelFields]
+          .sort((first, second) => Number(second[2]) - Number(first[2]))
+          .map((field, index) => [field.index, skillLabelReplacements[index]]),
+      );
       let updatedStreamText = streamText.replace(
-        /(1 0 0 1 120 ([\d.]+) Tm\s*)(?:<[\dA-Fa-f]*>\s*Tj|\[[\s\S]*?\]\s*TJ)/g,
-        (operator, prefix: string, yText: string) => {
-          const replacement = skillLabelReplacements.find((item) =>
-            Math.abs(item.y - Number(yText)) < 0.01,
-          );
+        skillLabelPattern,
+        (operator, prefix: string, yText: string, fieldOffset: number) => {
+          if (Number(yText) < 160 || Number(yText) > 390) return operator;
+          const replacement = skillLabelReplacementByOffset.get(fieldOffset);
           if (!replacement) return operator;
-          skillLabelReplacementCounts.set(
-            replacement,
-            (skillLabelReplacementCounts.get(replacement) ?? 0) + 1,
+          const positionedPrefix = prefix.replace(
+            /(1 0 0 1 120 )[\d.]+( Tm\s*)$/,
+            (_, start: string, end: string) => `${start}${replacement.y}${end}`,
           );
-          return `${prefix}<${encodePdfText(replacement.value)}> Tj`;
+          return `${positionedPrefix}<${encodePdfText(replacement.value)}> Tj`;
         },
       );
-      if (skillLabelReplacements.some((replacement) => skillLabelReplacementCounts.get(replacement) !== 1)) {
-        throw new Error("The certificate template is missing one or more expected skill-name fields");
-      }
 
-      const maximumScoreBaselines = [370.48, 330.73, 290.98, 251.23, 211.48, 171.73];
-      const maximumScoreReplacementCounts = Array(assessments.length).fill(0);
+      const maximumScoreReplacementCounts = Array(assessmentRows.length).fill(0);
       updatedStreamText = updatedStreamText.replace(
         /(\/F0 ([\d.]+) Tf\s*([\d.]+) Tz\s*1 0 0 1 )([\d.]+) ([\d.]+) Tm\s*<([\dA-Fa-f]+)>\s*Tj/g,
         (
@@ -1103,22 +1287,24 @@ export default function DashboardClient({
           yText: string,
           originalValueHex: string,
         ) => {
-          const rowIndex = maximumScoreBaselines.findIndex((baseline) =>
-            Math.abs(baseline - Number(yText)) < 0.01,
+          const rowIndex = assessmentRows.findIndex(({ maximumScoreBaseline }) =>
+            Math.abs(maximumScoreBaseline - Number(yText)) < 0.01,
           );
           if (rowIndex < 0) return operator;
           const originalValue = originalValueHex.match(/.{4}/g)
             ?.map((character) => String.fromCharCode(parseInt(character, 16)))
             .join("");
-          if (!originalValue || !/^\d+$/.test(originalValue)) return operator;
+          if (!originalValue || !/^\d[\d.]*$/.test(originalValue)) return operator;
           maximumScoreReplacementCounts[rowIndex] += 1;
           const fontSize = Number(fontSizeText);
           const horizontalScale = Number(horizontalScaleText) / 100;
-          // The template's embedded font assigns every ASCII digit a width of 556 units.
-          const digitWidth = 556;
-          const rightEdge = Number(xText) + originalValue.length * digitWidth * fontSize * horizontalScale / 1000;
-          const value = String(assessments[rowIndex].maxPossibleCoin);
-          const x = rightEdge - value.length * digitWidth * fontSize * horizontalScale / 1000;
+          const glyphWidth = (character: string) => character === "." ? 278 : 556;
+          const textWidth = (value: string) =>
+            Array.from(value).reduce((width, character) => width + glyphWidth(character), 0)
+            * fontSize * horizontalScale / 1000;
+          const rightEdge = Number(xText) + textWidth(originalValue);
+          const value = assessmentRows[rowIndex].assessment.maxPossibleCoin.toLocaleString("id-ID");
+          const x = rightEdge - textWidth(value);
           return `${fontPrefix}${x.toFixed(2)} ${yText} Tm\n<${encodePdfText(value)}> Tj`;
         },
       );
@@ -1127,18 +1313,19 @@ export default function DashboardClient({
       }
 
       const pageTwoReplacements = [
-        { x: 501.82, y: 370.09, value: String(assessments[0].earnedCoin) },
-        { x: 501.82, y: 330.34, value: String(assessments[1].earnedCoin) },
-        { x: 501.82, y: 290.59, value: String(assessments[2].earnedCoin) },
-        { x: 500.64, y: 250.84, value: String(assessments[3].earnedCoin) },
-        { x: 496.61, y: 211.09, value: String(assessments[4].earnedCoin) },
-        { x: 501.33, y: 171.34, value: String(assessments[5].earnedCoin) },
-        { x: 741.9, y: 370.48, value: percentage(assessments[0].earnedCoin, assessments[0].maxPossibleCoin) },
-        { x: 741.9, y: 330.73, value: percentage(assessments[1].earnedCoin, assessments[1].maxPossibleCoin) },
-        { x: 741.9, y: 290.98, value: percentage(assessments[2].earnedCoin, assessments[2].maxPossibleCoin) },
-        { x: 741.9, y: 251.23, value: percentage(assessments[3].earnedCoin, assessments[3].maxPossibleCoin) },
-        { x: 741.9, y: 211.48, value: percentage(assessments[4].earnedCoin, assessments[4].maxPossibleCoin) },
-        { x: 741.9, y: 171.73, value: percentage(assessments[5].earnedCoin, assessments[5].maxPossibleCoin) },
+        ...assessmentRows.flatMap(({
+          assessment,
+          earnedScoreFieldX,
+          earnedScoreBaseline,
+          percentageBaseline,
+        }) => [
+          { x: earnedScoreFieldX, y: earnedScoreBaseline, value: String(assessment.earnedCoin) },
+          {
+            x: 741.9,
+            y: percentageBaseline,
+            value: percentage(assessment.earnedCoin, assessment.maxPossibleCoin),
+          },
+        ]),
         { x: 487.64, y: 123.52, value: String(totals.earnedCoin) },
         { x: 738.82, y: 124.09, value: percentage(totals.earnedCoin, totals.maxPossibleCoin) },
         { x: 67.5, y: 58.46, value: `DITERBITKAN ${issuedDate}` },
@@ -1210,26 +1397,28 @@ export default function DashboardClient({
           });
         }
       };
-      const scoreCenters = [508.4, 508.4, 508.4, 507.22, 506.49, 507.91];
-      const scoreBaselines = [370.09, 330.34, 290.59, 250.84, 211.09, 171.34];
-      const percentageBaselines = [370.48, 330.73, 290.98, 251.23, 211.48, 171.73];
-      assessments.forEach((assessment, index) => {
+      assessmentRows.forEach(({
+        assessment,
+        earnedScoreBaseline,
+        percentageBaseline,
+        scoreCenter,
+      }) => {
         drawVisibleValue(
-          scoreCenters[index],
-          scoreBaselines[index],
+          scoreCenter,
+          earnedScoreBaseline,
           String(assessment.earnedCoin),
           11.25,
           scoreColor,
         );
         drawVisibleValue(
           754.95,
-          percentageBaselines[index],
+          percentageBaseline,
           percentage(assessment.earnedCoin, assessment.maxPossibleCoin),
           10.5,
           percentageColor,
         );
         drawProgressBar(
-          percentageBaselines[index],
+          percentageBaseline,
           percentageValue(assessment.earnedCoin, assessment.maxPossibleCoin),
         );
       });
@@ -1257,16 +1446,123 @@ export default function DashboardClient({
         color: rgb(0.62, 0.69, 0.8),
       });
 
-      const pdfBytes = await document.save();
-      const url = URL.createObjectURL(new Blob([pdfBytes.buffer as ArrayBuffer], { type: "application/pdf" }));
-      const link = window.document.createElement("a");
-      link.href = url;
-      link.download = `joolo-40-day-${verificationCode.toLowerCase().replaceAll("/", "-")}.pdf`;
-      window.document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      return document.save();
+  }
+
+  function downloadCompletionCertificate(pdfBytes: Uint8Array, verificationCode: string) {
+    const url = URL.createObjectURL(new Blob([pdfBytes.buffer as ArrayBuffer], { type: "application/pdf" }));
+    const link = window.document.createElement("a");
+    link.href = url;
+    link.download = `joolo-40-day-${verificationCode.toLowerCase().replaceAll("/", "-")}.pdf`;
+    window.document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function closeCertificateConfirmation() {
+    if (certificateGenerating) return;
+    setCertificateConfirmationOpen(false);
+    setCertificatePreviewUrl(null);
+    setCertificatePreviewRows([]);
+  }
+
+  async function openCertificateConfirmation() {
+    if (!canClaimCertificate || !certificateStatusLoaded || certificateGenerating) return;
+    if (certificateClaimed) {
+      if (claimedCertificate) {
+        await downloadClaimedCompletionCertificate(claimedCertificate);
+      } else {
+        notify("The original certificate details are unavailable, so it cannot be safely regenerated.", 10000);
+      }
+      return;
+    }
+    setCertificateGenerating(true);
+    try {
+      const assessmentRows = getCertificateAssessmentRows();
+      const previewBytes = await buildCompletionCertificatePdf("PREVIEW", "", assessmentRows, true);
+      const previewUrl = URL.createObjectURL(
+        new Blob([previewBytes.buffer as ArrayBuffer], { type: "application/pdf" }),
+      );
+      setCertificatePreviewRows(assessmentRows);
+      setCertificatePreviewUrl(previewUrl);
+      setCertificateConfirmationOpen(true);
+    } catch (error) {
+      console.error("Unable to prepare completion certificate preview", error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      notify(`Certificate preview could not be prepared: ${errorMessage}`, 10000);
+    } finally {
+      setCertificateGenerating(false);
+    }
+  }
+
+  async function downloadClaimedCompletionCertificate(certificate: ClaimedCertificate) {
+    if (certificateGenerating) return;
+    setCertificateGenerating(true);
+    try {
+      const pdfBytes = await buildCompletionCertificatePdf(
+        certificate.verificationCode,
+        certificate.issuedAt,
+        certificate.assessmentRows,
+        false,
+        certificate.fullName,
+      );
+      downloadCompletionCertificate(pdfBytes, certificate.verificationCode);
+      setCompletionDialog("certificate");
+    } catch (error) {
+      console.error("Unable to generate completion certificate", error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      notify(`Certificate could not be generated: ${errorMessage}`, 10000);
+    } finally {
+      setCertificateGenerating(false);
+    }
+  }
+
+  async function claimCompletionCertificate() {
+    if (!canClaimCertificate || !certificateStatusLoaded || certificateClaimed || certificateGenerating || !certificateConfirmationOpen) return;
+    setCertificateGenerating(true);
+    try {
+      const supabase = createClient();
+      const certificateName = profileName.trim() || email || "JOolo member";
+      const { data: certificateData, error: certificateError } = await supabase.rpc("issue_40_day_certificate", {
+        p_certificate_name: certificateName,
+        p_assessment_snapshot: certificatePreviewRows.map(({ skillCategoryId, assessment }) => ({
+          skillCategoryId,
+          softSkills: assessment.softSkills,
+          earnedCoin: assessment.earnedCoin,
+          maxPossibleCoin: assessment.maxPossibleCoin,
+        })),
+      });
+      if (certificateError) throw new Error(`Could not issue certificate: ${certificateError.message}`);
+      const certificate = Array.isArray(certificateData) ? certificateData[0] : certificateData;
+      if (
+        isRecord(certificate)
+        && (certificate.assessment_snapshot === null
+          || typeof certificate.certificate_name !== "string"
+          || !certificate.certificate_name.trim())
+      ) {
+        setCertificateClaimed(true);
+        setClaimedCertificate(null);
+        setCertificateConfirmationOpen(false);
+        setCertificatePreviewUrl(null);
+        setCertificatePreviewRows([]);
+        notify("The original certificate details are unavailable, so it cannot be safely regenerated.", 10000);
+        return;
+      }
+      const savedCertificate = parseClaimedCertificate(certificate);
+      const pdfBytes = await buildCompletionCertificatePdf(
+        savedCertificate.verificationCode,
+        savedCertificate.issuedAt,
+        savedCertificate.assessmentRows,
+        false,
+        savedCertificate.fullName,
+      );
+      downloadCompletionCertificate(pdfBytes, savedCertificate.verificationCode);
+      setCertificateConfirmationOpen(false);
+      setCertificatePreviewUrl(null);
+      setCertificatePreviewRows([]);
       setCertificateClaimed(true);
+      setClaimedCertificate(savedCertificate);
       setCompletionDialog("certificate");
     } catch (error) {
       console.error("Unable to generate completion certificate", error);
@@ -1883,7 +2179,6 @@ export default function DashboardClient({
 
     setChallenges(initialChallenges);
     setCompletedPhaseQuestIds([]);
-    setCertificateClaimed(false);
     setSelectedDay(1);
     setDailyStardustByDay({});
     setChallengeCompletionDays({});
@@ -1892,7 +2187,7 @@ export default function DashboardClient({
     setProfileName(name);
     setProfileTheme("dark");
     setProfileDialog(null);
-    ["joolo-gender", "joolo-challenges", "joolo-certificate-claimed", "joolo-daily-stardust", "joolo-challenge-completion-days", "joolo-coins", "joolo-profile-name", "joolo-profile-theme"].forEach((key) => localStorage.removeItem(`${userId}:${key}`));
+    ["joolo-gender", "joolo-challenges", "joolo-daily-stardust", "joolo-challenge-completion-days", "joolo-coins", "joolo-profile-name", "joolo-profile-theme"].forEach((key) => localStorage.removeItem(`${userId}:${key}`));
     notify("Your journey data has been reset.");
   }
 
@@ -2204,13 +2499,8 @@ export default function DashboardClient({
           </div>
           {dayNumber === 40 && <div className={`day-40-actions ${canClaimCertificate ? "unlocked" : "locked"}`} aria-label={t("40-day challenge completion")}>
             {!canClaimCertificate && <p className="day-40-lock-note">{t("Complete at least one challenge on each of the 40 days to unlock these actions.")}</p>}
-            <button className="day-40-action-button evaluation-action" type="button" disabled={!canClaimCertificate} title={t(canClaimCertificate ? "View your 40-day evaluation results" : "Complete all challenges to unlock")} onClick={() => {
-              if (canClaimCertificate) setCompletionDialog("evaluation");
-            }}>
-              <Icon name="sparkles" size={19} /> {t("40-Day Evaluation Results")} <Icon name="arrow" size={17} />
-            </button>
-            <button className={`day-40-action-button certificate-action ${certificateClaimed ? "claimed" : ""}`} type="button" disabled={!canClaimCertificate || certificateGenerating} title={t(canClaimCertificate ? "Claim your completion certificate" : "Complete all challenges to unlock")} onClick={() => { void claimCompletionCertificate(); }}>
-              <Icon name="certificate" size={19} /> {t(certificateGenerating ? "Generating certificate..." : certificateClaimed ? "Download certificate again" : "Claim Certificate")} <Icon name="arrow" size={17} />
+            <button className={`day-40-action-button certificate-action ${certificateClaimed ? "claimed" : ""}`} type="button" disabled={!canClaimCertificate || !certificateStatusLoaded || certificateGenerating || (certificateClaimed && !claimedCertificate)} title={t(canClaimCertificate ? "Claim your completion certificate" : "Complete all challenges to unlock")} onClick={() => { void openCertificateConfirmation(); }}>
+              <Icon name="certificate" size={19} /> {t(certificateGenerating ? "Generating certificate..." : certificateClaimed ? claimedCertificate ? "Download certificate again" : "Certificate already claimed" : "Claim Certificate")} <Icon name="arrow" size={17} />
             </button>
           </div>}
         </section>
@@ -2375,7 +2665,7 @@ export default function DashboardClient({
           </section>
           <section className="profile-panel">
             <span className="profile-section-label">{t("ACHIEVEMENTS")}</span>
-            <button className="profile-action-row certificate-row" disabled={!canClaimCertificate || certificateGenerating} onClick={() => { void claimCompletionCertificate(); }}><span className="profile-row-icon"><Icon name="certificate" size={25} /></span><strong>{t(certificateGenerating ? "Generating certificate..." : certificateClaimed ? "Download certificate again" : "Claim Certificate")}</strong><span className="certificate-progress">{t(certificateClaimed ? "CLAIMED" : canClaimCertificate ? "COMPLETE 40 DAYS" : "AVAILABLE ON DAY 40")}</span><Icon name="chevron" size={21} /></button>
+            <button className="profile-action-row certificate-row" disabled={!canClaimCertificate || !certificateStatusLoaded || certificateGenerating || (certificateClaimed && !claimedCertificate)} onClick={() => { void openCertificateConfirmation(); }}><span className="profile-row-icon"><Icon name="certificate" size={25} /></span><strong>{t(certificateGenerating ? "Generating certificate..." : certificateClaimed ? claimedCertificate ? "Download certificate again" : "Certificate already claimed" : "Claim Certificate")}</strong><span className="certificate-progress">{t(certificateClaimed ? "CLAIMED" : canClaimCertificate ? "COMPLETE 40 DAYS" : "AVAILABLE ON DAY 40")}</span><Icon name="chevron" size={21} /></button>
           </section>
           <section className="profile-panel profile-data-panel">
             <span className="profile-section-label">{t("DATA")}</span>
@@ -2409,33 +2699,74 @@ export default function DashboardClient({
         </div>}
       </div>}
 
+      {certificateConfirmationOpen && <div className="modal-backdrop certificate-confirmation-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeCertificateConfirmation(); }}>
+        <section className="modal glass-panel certificate-confirmation-dialog" role="alertdialog" aria-modal="true" aria-labelledby="certificate-confirmation-title" aria-describedby="certificate-confirmation-message">
+          <button className="modal-close" type="button" onClick={closeCertificateConfirmation} disabled={certificateGenerating} aria-label={t("Close")}><Icon name="close" size={19} /></button>
+          <div className="certificate-confirmation-copy">
+            <div className="modal-icon"><Icon name="certificate" size={25} /></div>
+            <span className="eyebrow">{t("Claim certificate")}</span>
+            <h2 id="certificate-confirmation-title">{t("Review your certificate")}</h2>
+            <p id="certificate-confirmation-message">{t("This certificate can only be claimed once. Before you confirm, check that your full name and all scores are correct.")}</p>
+            <div className="certificate-review-name">
+              <span>{t("Full name on certificate")}</span>
+              <strong>{profileName.trim() || email || "JOolo member"}</strong>
+              <button type="button" onClick={() => {
+                closeCertificateConfirmation();
+                setProfileOpen(true);
+                setProfileDialog("edit");
+              }} disabled={certificateGenerating}>{t("Edit full name")}</button>
+            </div>
+            <div className="certificate-review-scores">
+              <h3>{t("Your soft-skill scores")}</h3>
+              <div className="certificate-review-table-wrap">
+                <table>
+                  <thead><tr><th>{t("Soft skills")}</th><th>{t("Earned coin")}</th><th>{t("Max coin")}</th><th>{t("Percentage")}</th></tr></thead>
+                  <tbody>{certificatePreviewRows.map(({ skillCategoryId, assessment }) => (
+                    <tr key={skillCategoryId}>
+                      <th scope="row">{assessment.softSkills}</th>
+                      <td>{assessment.earnedCoin.toLocaleString("id-ID")}</td>
+                      <td>{assessment.maxPossibleCoin.toLocaleString("id-ID")}</td>
+                      <td>{assessment.maxPossibleCoin > 0
+                        ? `${((assessment.earnedCoin / assessment.maxPossibleCoin) * 100).toFixed(1)}%`
+                        : "0.0%"}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            </div>
+            <p className="certificate-preview-note">{t("The preview shows the name and scores that will be issued. The final download will include its official issue date and certificate ID.")}</p>
+            <div className="certificate-confirmation-actions">
+              <button className="outline-button" type="button" onClick={closeCertificateConfirmation} disabled={certificateGenerating}>{t("Cancel claim")}</button>
+              <button className="primary-button" type="button" onClick={() => { void claimCompletionCertificate(); }} disabled={certificateGenerating || !certificatePreviewUrl || certificatePreviewRows.length !== certificateSkillOrder.length}>
+                {certificateGenerating ? t("Generating certificate...") : t("Confirm and download certificate")} <Icon name="certificate" size={16} />
+              </button>
+            </div>
+          </div>
+          <div className="certificate-preview-pane">
+            <div className="certificate-preview-badge">{t("PREVIEW ONLY · NOT ISSUED")}</div>
+            {certificatePreviewUrl
+              ? <iframe title={t("Certificate preview")} src={certificatePreviewUrl} />
+              : <div className="certificate-preview-loading" role="status">{t("Preparing certificate preview...")}</div>}
+          </div>
+        </section>
+      </div>}
+
       {completionDialog && <div className="modal-backdrop completion-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setCompletionDialog(null); }}>
         <section className="modal glass-panel completion-dialog" role="dialog" aria-modal="true" aria-labelledby="completion-dialog-title">
           <button className="modal-close" type="button" onClick={() => setCompletionDialog(null)} aria-label={t("Close")}><Icon name="close" size={19} /></button>
-          <div className="modal-icon"><Icon name={completionDialog === "evaluation" ? "sparkles" : "certificate"} size={25} /></div>
-          {completionDialog === "evaluation" ? <>
-            <span className="eyebrow">{t("YOUR JOURNEY, REFLECTED")}</span>
-            <h2 id="completion-dialog-title">{t("40-day evaluation.")}</h2>
-            <p>{t("You made it to the final day and completed every challenge.")}</p>
-            <div className="evaluation-stats">
-              <div><span>{t("CHALLENGES COMPLETED")}</span><strong>{completedPhaseQuests.length} / {phaseDailyQuests.length}</strong></div>
-              <div><span>{t("STARDUST EARNED")}</span><strong>✦ {completedStardust.toLocaleString()}</strong></div>
-              <div><span>{t("JOURNEY")}</span><strong>{t("40 days")}</strong></div>
-            </div>
-            <div className="evaluation-quest-list">{challenges.map((challenge) => <div key={challenge.id}><span className="evaluation-check"><Icon name="check" size={14} /></span><span>{challenge.title}</span><strong>✦ {challenge.reward}</strong></div>)}</div>
-            <button className="primary-button submit-button" type="button" onClick={() => setCompletionDialog(null)}>{t("Celebrate your progress")} <Icon name="sparkles" size={16} /></button>
-          </> : <>
-            <span className="eyebrow">{t("A MILESTONE WORTH CELEBRATING")}</span>
-            <div className="claimed-certificate">
-              <span className="certificate-star">✦</span>
-              <span className="certificate-overline">{t("JOOLO · CERTIFICATE OF COMPLETION")}</span>
-              <h2 id="completion-dialog-title">{t(certificateClaimed ? "Certificate claimed!" : "Congratulations!")}</h2>
-              <p>{t("This recognizes ")}<strong>{profileName}</strong>{t(" for completing the 40-day cosmic growth challenge.")}</p>
-              <span className="certificate-days">{t("40 DAYS · CHALLENGE COMPLETE")}</span>
-            </div>
-            <p className="certificate-claim-note">{t(certificateClaimed ? "Your milestone is saved in your journey on this device." : "Your 40-day journey is complete. This certificate has been added to your milestones.")}</p>
-            <button className="primary-button submit-button" type="button" onClick={() => { void claimCompletionCertificate(); }}>{t("Download certificate again")} <Icon name="certificate" size={16} /></button>
-          </>}
+          <div className="modal-icon"><Icon name="certificate" size={25} /></div>
+          <span className="eyebrow">{t("A MILESTONE WORTH CELEBRATING")}</span>
+          <div className="claimed-certificate">
+            <span className="certificate-star">✦</span>
+            <span className="certificate-overline">{t("JOOLO · CERTIFICATE OF COMPLETION")}</span>
+            <h2 id="completion-dialog-title">{t(certificateClaimed ? "Certificate claimed!" : "Congratulations!")}</h2>
+            <p>{t("This recognizes ")}<strong>{claimedCertificate?.fullName || profileName}</strong>{t(" for completing the 40-day cosmic growth challenge.")}</p>
+            <span className="certificate-days">{t("40 DAYS · CHALLENGE COMPLETE")}</span>
+          </div>
+          <p className="certificate-claim-note">{t(certificateClaimed ? "Your milestone is saved in your journey on this device." : "Your 40-day journey is complete. This certificate has been added to your milestones.")}</p>
+          <button className="primary-button submit-button" type="button" disabled={!claimedCertificate || certificateGenerating} onClick={() => {
+            if (claimedCertificate) void downloadClaimedCompletionCertificate(claimedCertificate);
+          }}>{t(claimedCertificate ? "Download certificate again" : "Certificate already claimed")} <Icon name="certificate" size={16} /></button>
         </section>
       </div>}
 
