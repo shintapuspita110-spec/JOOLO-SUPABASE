@@ -21,30 +21,8 @@ type CoinLeaderboardEntry = {
   totalCoin: number;
   rank: number;
 };
-const demoLeaderboardProfiles = [
-  { displayName: "Maya Chen", avatarUrl: "/AVATAR/Woman/Luna.png", gender: "woman", dailyCoin: 120, weeklyCoin: 1460 },
-  { displayName: "Arif Nugraha", avatarUrl: "/AVATAR/Man/Atlas.png", gender: "man", dailyCoin: 105, weeklyCoin: 1320 },
-  { displayName: "Sofia Reyes", avatarUrl: "/AVATAR/Woman/Aurora.png", gender: "woman", dailyCoin: 90, weeklyCoin: 1190 },
-  { displayName: "Daniel Kim", avatarUrl: "/AVATAR/Man/Ray.png", gender: "man", dailyCoin: 80, weeklyCoin: 1080 },
-  { displayName: "Nadia Putri", avatarUrl: "/AVATAR/Woman/Stella.png", gender: "woman", dailyCoin: 70, weeklyCoin: 970 },
-  { displayName: "Leo Martin", avatarUrl: "/AVATAR/Man/Cosmo.png", gender: "man", dailyCoin: 60, weeklyCoin: 860 },
-  { displayName: "Aisha Rahman", avatarUrl: "/AVATAR/Woman/Rosie.png", gender: "woman", dailyCoin: 50, weeklyCoin: 750 },
-  { displayName: "Ethan Park", avatarUrl: "/AVATAR/Man/Finn.png", gender: "man", dailyCoin: 40, weeklyCoin: 640 },
-  { displayName: "Clara Wijaya", avatarUrl: "/AVATAR/Woman/Luna.png", gender: "woman", dailyCoin: 30, weeklyCoin: 530 },
-  { displayName: "Noah Silva", avatarUrl: "/AVATAR/Man/Atlas.png", gender: "man", dailyCoin: 20, weeklyCoin: 420 },
-] as const;
-function getDemoCoinLeaderboard(period: Exclude<LeaderboardPeriod, "phase">): CoinLeaderboardEntry[] {
-  return demoLeaderboardProfiles.map((profile, index) => ({
-    userId: `demo-user-${index + 1}`,
-    displayName: profile.displayName,
-    avatarUrl: profile.avatarUrl,
-    gender: profile.gender,
-    totalCoin: period === "daily" ? profile.dailyCoin : profile.weeklyCoin,
-    rank: index + 1,
-  }));
-}
 function parseCoinLeaderboard(value: unknown): CoinLeaderboardEntry[] {
-  if (!Array.isArray(value) || value.length > 11) {
+  if (!Array.isArray(value) || value.length > 101) {
     throw new Error("Supabase returned an invalid leaderboard response");
   }
   let previousRank = 0;
@@ -61,7 +39,7 @@ function parseCoinLeaderboard(value: unknown): CoinLeaderboardEntry[] {
       || totalCoin < 0
       || !Number.isSafeInteger(rank)
       || rank <= previousRank
-      || (index < 10 && rank !== index + 1)
+      || (index < 100 && rank !== index + 1)
     ) {
       throw new Error("Supabase returned an invalid leaderboard entry");
     }
@@ -357,12 +335,14 @@ const indonesianTranslations: Record<string, string> = {
   "The leaderboard could not be loaded. Please try again.": "Papan peringkat gagal dimuat. Silakan coba lagi.",
   "Loading leaderboard...": "Memuat papan peringkat...",
   "No coins earned in this period yet.": "Belum ada koin yang diperoleh pada periode ini.",
-  "Demo leaderboard: these are fictional sample profiles and scores, not real JOolo members.": "Papan peringkat demo: profil dan skor ini fiktif, bukan anggota JOolo sungguhan.",
-  "Demo account": "Akun demo",
-  "Top 10 demo profiles by sample coins.": "10 profil demo teratas berdasarkan koin contoh.",
+  "Top 100 members by total coins earned.": "100 anggota teratas berdasarkan total koin yang diperoleh.",
+  "Leaderboard pagination": "Paginasi papan peringkat",
+  "Showing ranks ": "Menampilkan peringkat ",
+  " of ": " dari ",
+  "Previous leaderboard page": "Halaman papan peringkat sebelumnya",
+  "Next leaderboard page": "Halaman papan peringkat berikutnya",
   "Daily coin totals for the current day in WIB.": "Total koin harian untuk hari ini berdasarkan WIB.",
   "Weekly coin totals for the last 7 days.": "Total koin mingguan selama 7 hari terakhir.",
-  "Top 10 members by total coins earned.": "10 anggota teratas berdasarkan total koin yang diperoleh.",
   "Daily coins": "Koin harian",
   "Weekly coins": "Koin mingguan",
   "JOolo member": "Anggota JOolo",
@@ -892,6 +872,7 @@ export default function DashboardClient({
   const [bonusSearchOpen, setBonusSearchOpen] = useState(false);
   const [bonusSearch, setBonusSearch] = useState("");
   const [leaderboardPeriod, setLeaderboardPeriod] = useState<LeaderboardPeriod>("weekly");
+  const [leaderboardPage, setLeaderboardPage] = useState(0);
   const [coinLeaderboard, setCoinLeaderboard] = useState<CoinLeaderboardEntry[]>([]);
   const [dailyLeaderboardRank, setDailyLeaderboardRank] = useState(0);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
@@ -1157,15 +1138,12 @@ export default function DashboardClient({
     : leaderboardPeriod === "daily"
       ? coinLeaderboard.filter((leader) => leader.rank <= 3)
       : [];
-  const showingDemoLeaderboard = !leaderboardLoading
-    && !leaderboardError
-    && coinLeaderboard.length === 0
-    && leaderboardPeriod !== "phase";
-  const displayedLeaderboard = showingDemoLeaderboard
-    ? getDemoCoinLeaderboard(leaderboardPeriod)
-    : coinLeaderboard;
-  const topLeaders = displayedLeaderboard.slice(0, 3);
-  const pageLeaders = displayedLeaderboard.filter((leader) => leader.rank >= 4 && leader.rank <= 10);
+  const rankedLeaderboard = coinLeaderboard.filter((leader) => leader.rank <= 100);
+  const topLeaders = rankedLeaderboard.slice(0, 3);
+  const pageSize = 10;
+  const leaderboardPageCount = Math.ceil(Math.max(0, rankedLeaderboard.length - 3) / pageSize);
+  const visibleLeaderboardPage = Math.min(leaderboardPage, Math.max(0, leaderboardPageCount - 1));
+  const pageLeaders = rankedLeaderboard.slice(3 + visibleLeaderboardPage * pageSize, 3 + (visibleLeaderboardPage + 1) * pageSize);
   const chartBounds = { left: 72, top: 20, width: 820, height: 270 };
   const chartMaxValue = Math.max(1000, ...dailyLeaders.map((leader) => leader.totalCoin), ...Object.values(dailyStardustByDay));
   const chartYMax = Math.ceil(chartMaxValue / 200) * 200;
@@ -2937,7 +2915,7 @@ export default function DashboardClient({
         <main className="leaderboard-content shell" aria-labelledby="leaderboard-title">
           <div className="leaderboard-heading"><span className="eyebrow"><span className="eyebrow-line" /> {t("THE COSMIC COMMUNITY")}</span><h1 id="leaderboard-title">{t("Find your ")}<span>{t("orbit.")}</span></h1><p>{t("Every small step deserves a little stardust.")}</p></div>
           <div className="leaderboard-tabs" role="tablist" aria-label={t("Leaderboard period")}>
-            {(["daily", "weekly", "phase"] as const).map((period) => <button key={period} className={leaderboardPeriod === period ? "selected" : ""} role="tab" aria-selected={leaderboardPeriod === period} onClick={() => setLeaderboardPeriod(period)}>{t(period)}</button>)}
+            {(["daily", "weekly", "phase"] as const).map((period) => <button key={period} className={leaderboardPeriod === period ? "selected" : ""} role="tab" aria-selected={leaderboardPeriod === period} onClick={() => { setLeaderboardPeriod(period); setLeaderboardPage(0); }}>{t(period)}</button>)}
           </div>
           {leaderboardPeriod === "phase" ?           <section className="phase-progress-dashboard" aria-label={t("40-day progress dashboard")}>
             <div className="phase-progress-heading">
@@ -3002,21 +2980,20 @@ export default function DashboardClient({
             </div>
           </section> : <>
             <p className="leaderboard-period-note">{t(leaderboardPeriod === "daily" ? "Daily coin totals for the current day in WIB." : "Weekly coin totals for the last 7 days.")}</p>
-            {showingDemoLeaderboard && <p className="leaderboard-demo-note" role="note">{t("Demo leaderboard: these are fictional sample profiles and scores, not real JOolo members.")}</p>}
             {leaderboardLoading
               ? <p className="leaderboard-state" role="status">{t("Loading leaderboard...")}</p>
               : leaderboardError
                 ? <p className="leaderboard-state is-error" role="alert">{t(leaderboardError)}</p>
-                : displayedLeaderboard.length === 0
+                : rankedLeaderboard.length === 0
                   ? <p className="leaderboard-state">{t("No coins earned in this period yet.")}</p>
                   : <>
-                    <p className="leaderboard-top-ten-note">{t(showingDemoLeaderboard ? "Top 10 demo profiles by sample coins." : "Top 10 members by total coins earned.")}</p>
+                    <p className="leaderboard-top-ten-note">{t("Top 100 members by total coins earned.")}</p>
                     {topLeaders.length === 3 && <section className="podium" aria-label={t("Top three players")}>
                       {[{ leader: topLeaders[1], rank: 2 }, { leader: topLeaders[0], rank: 1 }, { leader: topLeaders[2], rank: 3 }].map(({ leader, rank }) => (
                         <article className={`podium-player podium-${rank}`} key={leader.userId}>
                           <div className="podium-rank">{rank === 1 && <span className="crown">♛</span>}{rank}</div>
                           <div className="podium-avatar-wrap"><Image src={leader.avatarUrl || (leader.gender === "man" ? "/AVATAR/Man/Ray.png" : "/AVATAR/Woman/Luna.png")} alt="" className="podium-avatar" width={240} height={240} sizes="(max-width: 560px) 105px, 138px" /><span className="avatar-glow" /></div>
-                          <strong>{leader.displayName || t("JOolo member")}</strong><span className="podium-title">{showingDemoLeaderboard ? t("Demo account") : t(leaderboardPeriod === "daily" ? "Daily coins" : "Weekly coins")}</span>
+                          <strong>{leader.displayName || t("JOolo member")}</strong><span className="podium-title">{t(leaderboardPeriod === "daily" ? "Daily coins" : "Weekly coins")}</span>
                           <div className="podium-score"><span className="leader-coin">✦</span>{leader.totalCoin.toLocaleString()}</div>
                         </article>
                       ))}
@@ -3027,11 +3004,16 @@ export default function DashboardClient({
                         return <article className={`leader-list-row ${isYou ? "you" : ""}`} key={leader.userId}>
                           <span className="list-rank">{leader.rank}</span>
                           <Image className="list-avatar" src={leader.avatarUrl || (leader.gender === "man" ? "/AVATAR/Man/Ray.png" : "/AVATAR/Woman/Luna.png")} alt="" width={100} height={100} sizes="48px" />
-                          <span className="list-player">{leader.displayName || t("JOolo member")}<small>{showingDemoLeaderboard ? t("Demo account") : isYou ? t("Your cosmic journey") : t(leaderboardPeriod === "daily" ? "Daily coins" : "Weekly coins")}</small></span>
+                          <span className="list-player">{leader.displayName || t("JOolo member")}<small>{isYou ? t("Your cosmic journey") : t(leaderboardPeriod === "daily" ? "Daily coins" : "Weekly coins")}</small></span>
                           <span className="list-score"><span className="leader-coin">✦</span><b>{leader.totalCoin.toLocaleString()}</b></span>
                         </article>;
                       })}
                     </section>
+                    {leaderboardPageCount > 1 && <nav className="leaderboard-pagination" aria-label={t("Leaderboard pagination")}>
+                      <span>{t("Showing ranks ")}{4 + visibleLeaderboardPage * pageSize}–{Math.min(3 + (visibleLeaderboardPage + 1) * pageSize, rankedLeaderboard.length)}{t(" of ")}{rankedLeaderboard.length}</span>
+                      <button className="page-button previous" type="button" disabled={visibleLeaderboardPage === 0} aria-label={t("Previous leaderboard page")} onClick={() => setLeaderboardPage((page) => Math.max(0, page - 1))}><Icon name="chevron" size={15} />{t("PREVIOUS")}</button>
+                      <button className="page-button" type="button" disabled={visibleLeaderboardPage >= leaderboardPageCount - 1} aria-label={t("Next leaderboard page")} onClick={() => setLeaderboardPage((page) => Math.min(leaderboardPageCount - 1, page + 1))}>{t("NEXT")}<Icon name="chevron" size={15} /></button>
+                    </nav>}
                   </>}
           </>}
         </main>

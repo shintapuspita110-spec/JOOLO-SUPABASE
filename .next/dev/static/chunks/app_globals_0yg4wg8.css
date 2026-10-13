@@ -2501,19 +2501,6 @@ h1, h2, h3, p {
   line-height: 1.55;
 }
 
-.leaderboard-demo-note {
-  color: #f3d794;
-  text-align: center;
-  background: #f5c97814;
-  border: 1px solid #f5c97866;
-  border-radius: 10px;
-  max-width: 770px;
-  margin: 0 auto 15px;
-  padding: 9px 14px;
-  font-size: 11px;
-  line-height: 1.5;
-}
-
 .leaderboard-top-ten-note {
   color: #8292a9;
   margin-bottom: 0;
@@ -2800,6 +2787,13 @@ h1, h2, h3, p {
   border-color: var(--cyan);
   transform: translateY(-2px);
   box-shadow: 0 0 22px #5cf2e233;
+}
+
+.page-button:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
 }
 
 .page-button.previous svg {
