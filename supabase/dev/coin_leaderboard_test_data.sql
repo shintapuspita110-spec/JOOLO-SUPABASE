@@ -161,10 +161,27 @@ cross join lateral (
 ) as dates
 on conflict (user_id, earned_on) do nothing;
 
+insert into public.coin_leaderboard_test_score_overrides (user_id, daily_coin, weekly_coin)
+select
+  profile.user_id,
+  coalesce(sum(event.earned_coin) filter (
+    where event.earned_at >= date_trunc('day', now() at time zone 'Asia/Jakarta') at time zone 'Asia/Jakarta'
+      and event.earned_at < now()
+  ), 0)::integer,
+  coalesce(sum(event.earned_coin) filter (
+    where event.earned_at >= now() - interval '7 days'
+      and event.earned_at < now()
+  ), 0)::integer
+from public.coin_leaderboard_test_profiles as profile
+left join public.coin_leaderboard_test_events as event on event.user_id = profile.user_id
+group by profile.user_id
+on conflict (user_id) do nothing;
+
 commit;
 
 select
   (select count(*) from public.coin_leaderboard_test_profiles) as test_user_count,
+  (select count(*) from public.coin_leaderboard_test_score_overrides) as test_score_override_count,
   (select count(*) from public.coin_leaderboard_test_events) as saved_test_coin_event_count,
   (select min(earned_coin) from public.coin_leaderboard_test_events) as min_saved_daily_coin,
   (select max(earned_coin) from public.coin_leaderboard_test_events) as max_saved_daily_coin,

@@ -6578,6 +6578,119 @@ h1, h2, h3, p {
   border-color: #f58296b3;
 }
 
+.admin-delete.is-danger {
+  border-color: #f582964d;
+}
+
+.admin-test-users-note {
+  color: #9aaac0;
+  margin: -7px 0 0;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.admin-test-user-form {
+  max-width: 740px;
+  margin: 17px 0 25px;
+}
+
+.admin-test-user-form > label {
+  color: #b8c6d8;
+  letter-spacing: 1.1px;
+  margin-top: 5px;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.admin-test-user-form > input, .admin-test-user-form > select, .admin-test-score-fields input {
+  color: #effaff;
+  background: #050d1aad;
+  border: 1px solid #8facc942;
+  border-radius: 9px;
+  width: 100%;
+  min-height: 45px;
+  padding: 11px 13px;
+  font-size: 12px;
+}
+
+.admin-test-user-form > select option {
+  color: #effaff;
+  background: #101b2e;
+}
+
+.admin-test-user-form > input:focus, .admin-test-user-form > select:focus, .admin-test-score-fields input:focus {
+  border-color: #5cf2e2bf;
+  outline: 0;
+  box-shadow: 0 0 0 3px #5cf2e214;
+}
+
+.admin-test-score-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  display: grid;
+}
+
+.admin-test-score-fields > div {
+  gap: 9px;
+  display: grid;
+}
+
+.admin-test-score-fields label {
+  color: #b8c6d8;
+  letter-spacing: 1.1px;
+  margin-top: 5px;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.admin-test-user-list {
+  gap: 9px;
+  display: grid;
+}
+
+.admin-test-user-item {
+  background: #050e1b5c;
+  border: 1px solid #7d9bba2b;
+  border-radius: 12px;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 13px;
+  padding: 10px 12px;
+  display: grid;
+}
+
+.admin-test-user-item > img {
+  object-fit: cover;
+  border: 1px solid #8facc940;
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+}
+
+.admin-test-user-copy {
+  gap: 3px;
+  min-width: 0;
+  display: grid;
+}
+
+.admin-test-user-copy strong {
+  color: #edf3ff;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 700 12px Manrope, sans-serif;
+  overflow: hidden;
+}
+
+.admin-test-user-copy > span, .admin-test-user-copy small {
+  color: #9aaac0;
+  font-size: 9px;
+}
+
+.admin-test-user-actions {
+  gap: 7px;
+  display: flex;
+}
+
 @media (max-width: 700px) {
   .bonus-heading-actions {
     gap: 8px;
@@ -6678,9 +6791,34 @@ h1, h2, h3, p {
   }
 
   .admin-delete {
-    grid-column: 2;
-    justify-self: start;
     padding: 6px 9px;
+  }
+
+  .admin-test-user-item {
+    grid-template-columns: 38px minmax(0, 1fr);
+    gap: 9px;
+    padding: 9px;
+  }
+
+  .admin-test-user-item > img {
+    width: 36px;
+    height: 36px;
+  }
+
+  .admin-test-user-actions {
+    grid-column: 2;
+  }
+
+  .admin-test-user-copy small {
+    font-size: 8px;
+  }
+
+  .admin-test-score-fields {
+    gap: 8px;
+  }
+
+  .admin-test-score-fields input {
+    padding-inline: 9px;
   }
 }
 

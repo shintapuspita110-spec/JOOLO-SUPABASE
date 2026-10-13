@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import AdminClient from "@/app/admin/admin-client";
+import AdminClient, { type AdminCoinTestUser } from "@/app/admin/admin-client";
 import { createClient } from "@/lib/supabase/server";
 import type { UploadedBonusResource } from "@/lib/bonus";
 
@@ -36,5 +36,16 @@ export default async function AdminPage() {
     throw new Error(`Could not load bonus resources: ${resourcesError.message}`);
   }
 
-  return <AdminClient userId={user.id} initialResources={(resources ?? []) as UploadedBonusResource[]} />;
+  const { data: coinTestUsers, error: coinTestUsersError } = await supabase.rpc("get_coin_leaderboard_test_users");
+  if (coinTestUsersError) {
+    throw new Error(`Could not load leaderboard test users: ${coinTestUsersError.message}`);
+  }
+
+  return (
+    <AdminClient
+      userId={user.id}
+      initialResources={(resources ?? []) as UploadedBonusResource[]}
+      initialCoinTestUsers={(coinTestUsers ?? []) as AdminCoinTestUser[]}
+    />
+  );
 }

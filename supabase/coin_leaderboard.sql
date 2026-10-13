@@ -23,10 +23,156 @@ create table if not exists public.coin_leaderboard_test_events (
   primary key (user_id, earned_on)
 );
 
+create table if not exists public.coin_leaderboard_test_score_overrides (
+  user_id uuid primary key references public.coin_leaderboard_test_profiles (user_id) on delete cascade,
+  daily_coin integer not null default 0 check (daily_coin between 0 and 10000000),
+  weekly_coin integer not null default 0 check (weekly_coin between 0 and 10000000),
+  updated_at timestamptz not null default now()
+);
+
+insert into public.coin_leaderboard_test_score_overrides (user_id, daily_coin, weekly_coin)
+select
+  test_profile.user_id,
+  coalesce(sum(event.earned_coin) filter (
+    where event.earned_at >= date_trunc('day', now() at time zone 'Asia/Jakarta') at time zone 'Asia/Jakarta'
+      and event.earned_at < now()
+  ), 0)::integer,
+  coalesce(sum(event.earned_coin) filter (
+    where event.earned_at >= now() - interval '7 days'
+      and event.earned_at < now()
+  ), 0)::integer
+from public.coin_leaderboard_test_profiles as test_profile
+left join public.coin_leaderboard_test_events as event on event.user_id = test_profile.user_id
+group by test_profile.user_id
+on conflict (user_id) do nothing;
+
 alter table public.coin_leaderboard_test_profiles enable row level security;
 alter table public.coin_leaderboard_test_events enable row level security;
+alter table public.coin_leaderboard_test_score_overrides enable row level security;
 revoke all on table public.coin_leaderboard_test_profiles from public, anon, authenticated;
 revoke all on table public.coin_leaderboard_test_events from public, anon, authenticated;
+revoke all on table public.coin_leaderboard_test_score_overrides from public, anon, authenticated;
+
+create or replace function public.get_coin_leaderboard_test_users()
+returns table (
+  user_id uuid,
+  display_name text,
+  avatar_url text,
+  gender text,
+  daily_coin integer,
+  weekly_coin integer
+)
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Administrator access is required';
+  end if;
+
+  return query
+    select
+      profile.user_id,
+      profile.display_name,
+      profile.avatar_url,
+      profile.gender,
+      coalesce(score.daily_coin, 0),
+      coalesce(score.weekly_coin, 0)
+    from public.coin_leaderboard_test_profiles as profile
+    left join public.coin_leaderboard_test_score_overrides as score using (user_id)
+    order by profile.display_name, profile.user_id;
+end;
+$$;
+
+create or replace function public.save_coin_leaderboard_test_user(
+  p_user_id uuid,
+  p_display_name text,
+  p_gender text,
+  p_daily_coin integer,
+  p_weekly_coin integer
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  normalized_name text := btrim(p_display_name);
+  selected_avatar text;
+begin
+  if not public.is_admin() then
+    raise exception 'Administrator access is required';
+  end if;
+  if p_user_id is null then
+    raise exception 'A test user ID is required';
+  end if;
+  if normalized_name is null or char_length(normalized_name) not between 1 and 60 then
+    raise exception 'Display name must contain between 1 and 60 characters';
+  end if;
+  if p_gender is null or p_gender not in ('woman', 'man') then
+    raise exception 'Gender must be woman or man';
+  end if;
+  if p_daily_coin is null or p_daily_coin not between 0 and 10000000
+    or p_weekly_coin is null or p_weekly_coin not between 0 and 10000000 then
+    raise exception 'Daily and weekly coins must be between 0 and 10000000';
+  end if;
+
+  selected_avatar := case
+    when p_gender = 'man' then
+      (array['/AVATAR/Man/Ray.png', '/AVATAR/Man/Atlas.png', '/AVATAR/Man/Finn.png', '/AVATAR/Man/Cosmo.png'])
+        [1 + mod(get_byte(decode(substr(md5(p_user_id::text), 1, 2), 'hex'), 0), 4)]
+    else
+      (array['/AVATAR/Woman/Luna.png', '/AVATAR/Woman/Rosie.png', '/AVATAR/Woman/Stella.png', '/AVATAR/Woman/Aurora.png'])
+        [1 + mod(get_byte(decode(substr(md5(p_user_id::text), 1, 2), 'hex'), 0), 4)]
+  end;
+
+  insert into public.coin_leaderboard_test_profiles (user_id, display_name, avatar_url, gender)
+  values (p_user_id, normalized_name, selected_avatar, p_gender)
+  on conflict (user_id) do update
+    set display_name = excluded.display_name,
+        avatar_url = excluded.avatar_url,
+        gender = excluded.gender;
+
+  insert into public.coin_leaderboard_test_score_overrides (user_id, daily_coin, weekly_coin, updated_at)
+  values (p_user_id, p_daily_coin, p_weekly_coin, now())
+  on conflict (user_id) do update
+    set daily_coin = excluded.daily_coin,
+        weekly_coin = excluded.weekly_coin,
+        updated_at = excluded.updated_at;
+
+  return p_user_id;
+end;
+$$;
+
+create or replace function public.delete_coin_leaderboard_test_user(p_user_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Administrator access is required';
+  end if;
+  if p_user_id is null then
+    raise exception 'A test user ID is required';
+  end if;
+
+  delete from public.coin_leaderboard_test_profiles
+    where user_id = p_user_id;
+  if not found then
+    raise exception 'Test user was not found';
+  end if;
+end;
+$$;
+
+revoke execute on function public.get_coin_leaderboard_test_users() from public, anon;
+revoke execute on function public.save_coin_leaderboard_test_user(uuid, text, text, integer, integer) from public, anon;
+revoke execute on function public.delete_coin_leaderboard_test_user(uuid) from public, anon;
+grant execute on function public.get_coin_leaderboard_test_users() to authenticated;
+grant execute on function public.save_coin_leaderboard_test_user(uuid, text, text, integer, integer) to authenticated;
+grant execute on function public.delete_coin_leaderboard_test_user(uuid) to authenticated;
 
 drop function if exists public.get_coin_leaderboard(text);
 
@@ -80,6 +226,17 @@ begin
         from public.coin_leaderboard_test_events as event
         where event.earned_at >= period_start
           and event.earned_at < period_end
+          and not exists (
+            select 1 from public.coin_leaderboard_test_score_overrides as score
+            where score.user_id = event.user_id
+          )
+      union all
+      select
+        score.user_id,
+        case when p_period = 'daily' then score.daily_coin else score.weekly_coin end::bigint as earned_coin,
+        true as is_test_data
+        from public.coin_leaderboard_test_score_overrides as score
+        where case when p_period = 'daily' then score.daily_coin else score.weekly_coin end > 0
       union all
       select
         test_profile.user_id,
@@ -106,6 +263,10 @@ begin
               from public.coin_leaderboard_test_events as saved_event
               where saved_event.user_id = test_profile.user_id
                 and saved_event.earned_on = dates.event_day::date
+          )
+          and not exists (
+            select 1 from public.coin_leaderboard_test_score_overrides as score
+            where score.user_id = test_profile.user_id
           )
     ),
     user_totals as (
@@ -144,5 +305,7 @@ $$;
 
 revoke execute on function public.get_coin_leaderboard(text) from public, anon;
 grant execute on function public.get_coin_leaderboard(text) to authenticated;
+
+notify pgrst, 'reload schema';
 
 commit;

@@ -6,18 +6,153 @@ import type { UploadedBonusResource, BonusType } from "@/lib/bonus";
 
 const maxImageSize = 5 * 1024 * 1024;
 const imageTypes = ["image/jpeg", "image/png", "image/webp"];
+export type AdminCoinTestUser = {
+  user_id: string;
+  display_name: string;
+  avatar_url: string;
+  gender: "woman" | "man";
+  daily_coin: number;
+  weekly_coin: number;
+};
+
+type CoinTestUserDraft = {
+  userId: string;
+  displayName: string;
+  gender: "woman" | "man";
+  dailyCoin: string;
+  weeklyCoin: string;
+};
+
+const newCoinTestUserDraft: CoinTestUserDraft = {
+  userId: "",
+  displayName: "",
+  gender: "woman",
+  dailyCoin: "0",
+  weeklyCoin: "0",
+};
 
 export default function AdminClient({
   userId,
   initialResources,
+  initialCoinTestUsers,
 }: {
   userId: string;
   initialResources: UploadedBonusResource[];
+  initialCoinTestUsers: AdminCoinTestUser[];
 }) {
   const [resources, setResources] = useState(initialResources);
+  const [coinTestUsers, setCoinTestUsers] = useState(initialCoinTestUsers);
+  const [coinTestUserDraft, setCoinTestUserDraft] = useState(newCoinTestUserDraft);
   const [busy, setBusy] = useState(false);
+  const [coinTestUsersBusy, setCoinTestUsersBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [coinTestUsersMessage, setCoinTestUsersMessage] = useState("");
+  const [coinTestUsersError, setCoinTestUsersError] = useState("");
+
+  async function refreshCoinTestUsers() {
+    const { data, error } = await createClient().rpc("get_coin_leaderboard_test_users");
+    if (error) throw new Error(error.message);
+    if (!Array.isArray(data)) throw new Error("Supabase returned an invalid test-user list");
+
+    const users = data.map((record): AdminCoinTestUser => {
+      if (
+        typeof record.user_id !== "string"
+        || typeof record.display_name !== "string"
+        || typeof record.avatar_url !== "string"
+        || (record.gender !== "woman" && record.gender !== "man")
+        || !Number.isSafeInteger(record.daily_coin)
+        || !Number.isSafeInteger(record.weekly_coin)
+      ) {
+        throw new Error("Supabase returned an invalid test-user record");
+      }
+      return {
+        user_id: record.user_id,
+        display_name: record.display_name,
+        avatar_url: record.avatar_url,
+        gender: record.gender,
+        daily_coin: record.daily_coin,
+        weekly_coin: record.weekly_coin,
+      };
+    });
+    setCoinTestUsers(users);
+  }
+
+  async function saveCoinTestUser(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setCoinTestUsersMessage("");
+    setCoinTestUsersError("");
+
+    const dailyCoin = Number(coinTestUserDraft.dailyCoin);
+    const weeklyCoin = Number(coinTestUserDraft.weeklyCoin);
+    if (
+      !coinTestUserDraft.displayName.trim()
+      || !Number.isSafeInteger(dailyCoin)
+      || dailyCoin < 0
+      || dailyCoin > 10_000_000
+      || !Number.isSafeInteger(weeklyCoin)
+      || weeklyCoin < 0
+      || weeklyCoin > 10_000_000
+    ) {
+      setCoinTestUsersError("Isi nama dan jumlah koin bilangan bulat antara 0 dan 10.000.000.");
+      return;
+    }
+
+    const isEditing = Boolean(coinTestUserDraft.userId);
+    const testUserId = coinTestUserDraft.userId || crypto.randomUUID();
+    setCoinTestUsersBusy(true);
+    try {
+      const { error } = await createClient().rpc("save_coin_leaderboard_test_user", {
+        p_user_id: testUserId,
+        p_display_name: coinTestUserDraft.displayName.trim(),
+        p_gender: coinTestUserDraft.gender,
+        p_daily_coin: dailyCoin,
+        p_weekly_coin: weeklyCoin,
+      });
+      if (error) throw new Error(error.message);
+      await refreshCoinTestUsers();
+      setCoinTestUserDraft(newCoinTestUserDraft);
+      setCoinTestUsersMessage(isEditing ? "Pengguna uji berhasil diperbarui." : "Pengguna uji berhasil ditambahkan.");
+    } catch (error) {
+      console.error("Unable to save leaderboard test user", error);
+      setCoinTestUsersError(error instanceof Error ? error.message : "Gagal menyimpan pengguna uji.");
+    } finally {
+      setCoinTestUsersBusy(false);
+    }
+  }
+
+  async function deleteCoinTestUser(testUser: AdminCoinTestUser) {
+    if (!window.confirm(`Hapus ${testUser.display_name} beserta skor Daily dan Weekly-nya?`)) return;
+    setCoinTestUsersMessage("");
+    setCoinTestUsersError("");
+    setCoinTestUsersBusy(true);
+    try {
+      const { error } = await createClient().rpc("delete_coin_leaderboard_test_user", {
+        p_user_id: testUser.user_id,
+      });
+      if (error) throw new Error(error.message);
+      setCoinTestUsers((users) => users.filter((item) => item.user_id !== testUser.user_id));
+      if (coinTestUserDraft.userId === testUser.user_id) setCoinTestUserDraft(newCoinTestUserDraft);
+      setCoinTestUsersMessage("Pengguna uji berhasil dihapus.");
+    } catch (error) {
+      console.error("Unable to delete leaderboard test user", error);
+      setCoinTestUsersError(error instanceof Error ? error.message : "Gagal menghapus pengguna uji.");
+    } finally {
+      setCoinTestUsersBusy(false);
+    }
+  }
+
+  function editCoinTestUser(testUser: AdminCoinTestUser) {
+    setCoinTestUsersMessage("");
+    setCoinTestUsersError("");
+    setCoinTestUserDraft({
+      userId: testUser.user_id,
+      displayName: testUser.display_name,
+      gender: testUser.gender,
+      dailyCoin: String(testUser.daily_coin),
+      weeklyCoin: String(testUser.weekly_coin),
+    });
+  }
 
   async function uploadResource(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -148,8 +283,8 @@ export default function AdminClient({
       <div className="admin-content shell">
         <section className="admin-heading">
           <span className="eyebrow"><span className="eyebrow-line" /> ADMINISTRATION</span>
-          <h1>Manage <span>Bonus</span></h1>
-          <p>Tambahkan e-book atau tracker. Sampul disimpan di Supabase Storage dan file diunduh dari link Google Drive.</p>
+          <h1>Manage <span>JOolo</span></h1>
+          <p>Kelola resource Bonus dan data pengguna uji leaderboard. Perubahan skor pengguna uji langsung memengaruhi peringkat Daily dan Weekly.</p>
         </section>
 
         <section className="admin-panel" aria-labelledby="admin-upload-title">
@@ -180,6 +315,116 @@ export default function AdminClient({
               {busy ? "Menyimpan..." : "Upload ke Bonus"}
             </button>
           </form>
+        </section>
+
+        <section className="admin-resource-section" aria-labelledby="coin-test-users-title">
+          <div className="admin-list-heading">
+            <div>
+              <span className="eyebrow">LEADERBOARD TEST DATA</span>
+              <h2 id="coin-test-users-title">Pengguna uji leaderboard <span>({coinTestUsers.length})</span></h2>
+            </div>
+            {coinTestUserDraft.userId && (
+              <button
+                className="admin-delete"
+                type="button"
+                disabled={coinTestUsersBusy}
+                onClick={() => setCoinTestUserDraft(newCoinTestUserDraft)}
+              >
+                Batal edit
+              </button>
+            )}
+          </div>
+          <p className="admin-test-users-note">Kelola nama dan total koin uji. Perubahan skor langsung memengaruhi peringkat Daily dan Weekly.</p>
+          <form className="admin-form admin-test-user-form" onSubmit={(event) => { void saveCoinTestUser(event); }}>
+            <label htmlFor="coin-test-name">DISPLAY NAME</label>
+            <input
+              id="coin-test-name"
+              type="text"
+              maxLength={60}
+              required
+              value={coinTestUserDraft.displayName}
+              onChange={(event) => {
+                const displayName = event.currentTarget.value;
+                setCoinTestUserDraft((draft) => ({ ...draft, displayName }));
+              }}
+              placeholder="Nama pengguna"
+            />
+
+            <label htmlFor="coin-test-gender">GENDER / JENIS AVATAR</label>
+            <select
+              id="coin-test-gender"
+              value={coinTestUserDraft.gender}
+              onChange={(event) => {
+                const gender = event.currentTarget.value === "man" ? "man" : "woman";
+                setCoinTestUserDraft((draft) => ({ ...draft, gender }));
+              }}
+            >
+              <option value="woman">Woman</option>
+              <option value="man">Man</option>
+            </select>
+
+            <div className="admin-test-score-fields">
+              <div>
+                <label htmlFor="coin-test-daily">DAILY COINS</label>
+                <input
+                  id="coin-test-daily"
+                  type="number"
+                  min={0}
+                  max={10_000_000}
+                  step={1}
+                  required
+                  value={coinTestUserDraft.dailyCoin}
+                  onChange={(event) => {
+                    const dailyCoin = event.currentTarget.value;
+                    setCoinTestUserDraft((draft) => ({ ...draft, dailyCoin }));
+                  }}
+                />
+              </div>
+              <div>
+                <label htmlFor="coin-test-weekly">WEEKLY COINS</label>
+                <input
+                  id="coin-test-weekly"
+                  type="number"
+                  min={0}
+                  max={10_000_000}
+                  step={1}
+                  required
+                  value={coinTestUserDraft.weeklyCoin}
+                  onChange={(event) => {
+                    const weeklyCoin = event.currentTarget.value;
+                    setCoinTestUserDraft((draft) => ({ ...draft, weeklyCoin }));
+                  }}
+                />
+              </div>
+            </div>
+
+            {coinTestUsersError && <p className="admin-feedback is-error" role="alert">{coinTestUsersError}</p>}
+            {coinTestUsersMessage && <p className="admin-feedback" role="status">{coinTestUsersMessage}</p>}
+            <button className="primary-button admin-submit" type="submit" disabled={coinTestUsersBusy}>
+              {coinTestUsersBusy ? "Menyimpan..." : coinTestUserDraft.userId ? "Simpan perubahan" : "Tambah pengguna uji"}
+            </button>
+          </form>
+
+          {coinTestUsers.length === 0 ? (
+            <p className="admin-empty">Belum ada pengguna uji. Tambahkan pengguna melalui formulir di atas.</p>
+          ) : (
+            <div className="admin-test-user-list">
+              {coinTestUsers.map((testUser) => (
+                <article className="admin-test-user-item" key={testUser.user_id}>
+                  <img src={testUser.avatar_url} alt="" />
+                  <div className="admin-test-user-copy">
+                    <strong>{testUser.display_name}</strong>
+                    <span>{testUser.gender === "man" ? "Man" : "Woman"}</span>
+                    <small>Daily: {testUser.daily_coin.toLocaleString("id-ID")} · Weekly: {testUser.weekly_coin.toLocaleString("id-ID")} coins</small>
+                  </div>
+                  <div className="admin-test-user-actions">
+                    <button className="admin-delete" type="button" disabled={coinTestUsersBusy} onClick={() => editCoinTestUser(testUser)}>Edit</button>
+                    <button className="admin-delete is-danger" type="button" disabled={coinTestUsersBusy} onClick={() => { void deleteCoinTestUser(testUser); }}>Hapus</button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="admin-resource-section" aria-labelledby="admin-resource-title">
