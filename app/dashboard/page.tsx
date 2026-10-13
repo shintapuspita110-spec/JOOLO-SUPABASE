@@ -52,7 +52,7 @@ export default async function DashboardPage() {
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("full_name, email, role")
+    .select("full_name, email, role, avatar_url")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -107,6 +107,7 @@ export default async function DashboardPage() {
       userId={user.id}
       email={profile?.email ?? user.email ?? ""}
       name={profile?.full_name || (typeof metadataName === "string" ? metadataName : "") || user.email?.split("@")[0] || "JOolo member"}
+      avatarUrl={profile?.avatar_url ?? ""}
       isAdmin={profile?.role === "admin"}
       uploadedResources={(bonusResources ?? []) as UploadedBonusResource[]}
       initialStartDate={challengeStartDate}

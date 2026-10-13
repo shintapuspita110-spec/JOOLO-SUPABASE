@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { PDFDocument, PDFName, PDFRawStream, StandardFonts, decodePDFRawStream, rgb } from "pdf-lib";
 import { strToU8, zipSync } from "fflate";
@@ -12,7 +13,69 @@ import type { UserDailyQuest } from "@/lib/user-daily-quests";
 type Gender = "woman" | "man";
 type Language = "en" | "id";
 type LeaderboardPeriod = "daily" | "weekly" | "phase";
-type Leader = { handle: string; title: string; avatar: string; daily: number; weekly: number; phase: number };
+type CoinLeaderboardEntry = {
+  userId: string;
+  displayName: string;
+  avatarUrl: string | null;
+  gender: Gender | null;
+  totalCoin: number;
+  rank: number;
+};
+const demoLeaderboardProfiles = [
+  { displayName: "Maya Chen", avatarUrl: "/AVATAR/Woman/Luna.png", gender: "woman", dailyCoin: 120, weeklyCoin: 1460 },
+  { displayName: "Arif Nugraha", avatarUrl: "/AVATAR/Man/Atlas.png", gender: "man", dailyCoin: 105, weeklyCoin: 1320 },
+  { displayName: "Sofia Reyes", avatarUrl: "/AVATAR/Woman/Aurora.png", gender: "woman", dailyCoin: 90, weeklyCoin: 1190 },
+  { displayName: "Daniel Kim", avatarUrl: "/AVATAR/Man/Ray.png", gender: "man", dailyCoin: 80, weeklyCoin: 1080 },
+  { displayName: "Nadia Putri", avatarUrl: "/AVATAR/Woman/Stella.png", gender: "woman", dailyCoin: 70, weeklyCoin: 970 },
+  { displayName: "Leo Martin", avatarUrl: "/AVATAR/Man/Cosmo.png", gender: "man", dailyCoin: 60, weeklyCoin: 860 },
+  { displayName: "Aisha Rahman", avatarUrl: "/AVATAR/Woman/Rosie.png", gender: "woman", dailyCoin: 50, weeklyCoin: 750 },
+  { displayName: "Ethan Park", avatarUrl: "/AVATAR/Man/Finn.png", gender: "man", dailyCoin: 40, weeklyCoin: 640 },
+  { displayName: "Clara Wijaya", avatarUrl: "/AVATAR/Woman/Luna.png", gender: "woman", dailyCoin: 30, weeklyCoin: 530 },
+  { displayName: "Noah Silva", avatarUrl: "/AVATAR/Man/Atlas.png", gender: "man", dailyCoin: 20, weeklyCoin: 420 },
+] as const;
+function getDemoCoinLeaderboard(period: Exclude<LeaderboardPeriod, "phase">): CoinLeaderboardEntry[] {
+  return demoLeaderboardProfiles.map((profile, index) => ({
+    userId: `demo-user-${index + 1}`,
+    displayName: profile.displayName,
+    avatarUrl: profile.avatarUrl,
+    gender: profile.gender,
+    totalCoin: period === "daily" ? profile.dailyCoin : profile.weeklyCoin,
+    rank: index + 1,
+  }));
+}
+function parseCoinLeaderboard(value: unknown): CoinLeaderboardEntry[] {
+  if (!Array.isArray(value) || value.length > 11) {
+    throw new Error("Supabase returned an invalid leaderboard response");
+  }
+  let previousRank = 0;
+  return value.map((item, index) => {
+    if (!isRecord(item)) throw new Error("Supabase returned an invalid leaderboard entry");
+    const totalCoin = typeof item.total_coin === "number" ? item.total_coin : Number(item.total_coin);
+    const rank = typeof item.leaderboard_rank === "number" ? item.leaderboard_rank : Number(item.leaderboard_rank);
+    if (
+      typeof item.user_id !== "string"
+      || typeof item.display_name !== "string"
+      || (item.avatar_url !== null && typeof item.avatar_url !== "string")
+      || (item.gender !== null && item.gender !== "woman" && item.gender !== "man")
+      || !Number.isSafeInteger(totalCoin)
+      || totalCoin < 0
+      || !Number.isSafeInteger(rank)
+      || rank <= previousRank
+      || (index < 10 && rank !== index + 1)
+    ) {
+      throw new Error("Supabase returned an invalid leaderboard entry");
+    }
+    previousRank = rank;
+    return {
+      userId: item.user_id,
+      displayName: item.display_name,
+      avatarUrl: item.avatar_url,
+      gender: item.gender,
+      totalCoin,
+      rank,
+    };
+  });
+}
 type BonusResource = { title: string; category: string; description: string; detail: string; image: string; rows?: string[][] };
 type ProfileDialog = "edit" | "reset" | "certificate" | "feedback" | "logout" | null;
 type CompletionDialog = "certificate" | null;
@@ -291,6 +354,18 @@ const indonesianTranslations: Record<string, string> = {
   "Complete all daily challenges to unlock these actions.": "Selesaikan semua tantangan harian untuk membuka fitur ini.",
   "Complete at least one challenge on each of the 40 days to unlock these actions.": "Selesaikan minimal satu tantangan pada setiap hari selama 40 hari untuk membuka fitur ini.",
   "Complete all challenges to unlock": "Selesaikan semua tantangan untuk membuka",
+  "The leaderboard could not be loaded. Please try again.": "Papan peringkat gagal dimuat. Silakan coba lagi.",
+  "Loading leaderboard...": "Memuat papan peringkat...",
+  "No coins earned in this period yet.": "Belum ada koin yang diperoleh pada periode ini.",
+  "Demo leaderboard: these are fictional sample profiles and scores, not real JOolo members.": "Papan peringkat demo: profil dan skor ini fiktif, bukan anggota JOolo sungguhan.",
+  "Demo account": "Akun demo",
+  "Top 10 demo profiles by sample coins.": "10 profil demo teratas berdasarkan koin contoh.",
+  "Daily coin totals for the current day in WIB.": "Total koin harian untuk hari ini berdasarkan WIB.",
+  "Weekly coin totals for the last 7 days.": "Total koin mingguan selama 7 hari terakhir.",
+  "Top 10 members by total coins earned.": "10 anggota teratas berdasarkan total koin yang diperoleh.",
+  "Daily coins": "Koin harian",
+  "Weekly coins": "Koin mingguan",
+  "JOolo member": "Anggota JOolo",
   "Claim your completion certificate": "Klaim sertifikat penyelesaian",
   "Certificate Claimed": "Sertifikat Diklaim",
   "Claim Certificate": "Klaim Sertifikat",
@@ -667,26 +742,6 @@ const initialChallenges: Challenge[] = [
   },
 ];
 
-const leaderboard: Leader[] = [
-  { handle: "@diana.love", title: "Nebula seeker", avatar: "photo-1534528741775-53994a69daeb", daily: 920, weekly: 8805, phase: 18920 },
-  { handle: "@john_life", title: "Orbit explorer", avatar: "photo-1500648767791-00dcc994a43e", daily: 870, weekly: 8239, phase: 17640 },
-  { handle: "@phil.gamer", title: "Cosmic voyager", avatar: "photo-1506794778202-cad84cf45f1d", daily: 845, weekly: 7987, phase: 16820 },
-  { handle: "@kendal4848", title: "Stardust collector", avatar: "photo-1507003211169-0a1dd7228f2d", daily: 810, weekly: 7568, phase: 15450 },
-  { handle: "@shiv.rajput", title: "Moon walker", avatar: "photo-1501196354995-cbb51c65aaea", daily: 780, weekly: 7532, phase: 14900 },
-  { handle: "@sally.stewart45", title: "Dream chaser", avatar: "photo-1531123897727-8f129e1688ce", daily: 760, weekly: 7218, phase: 14330 },
-  { handle: "@you", title: "Rising star", avatar: "photo-1534528741775-53994a69daeb", daily: 742, weekly: 7199, phase: 13980 },
-  { handle: "@kabir_sen2345", title: "Quiet comet", avatar: "photo-1506794778202-cad84cf45f1d", daily: 715, weekly: 6980, phase: 13520 },
-  { handle: "@natalie.fun", title: "Light finder", avatar: "photo-1524504388940-b1c1722653e1", daily: 690, weekly: 6757, phase: 12950 },
-  { handle: "@veronica6794", title: "Star wanderer", avatar: "photo-1534528741775-53994a69daeb", daily: 674, weekly: 6540, phase: 12580 },
-  { handle: "@alex.morning", title: "Early orbit", avatar: "photo-1500648767791-00dcc994a43e", daily: 651, weekly: 6290, phase: 12100 },
-  { handle: "@luna.grows", title: "Moon gardener", avatar: "photo-1531123897727-8f129e1688ce", daily: 630, weekly: 6085, phase: 11720 },
-  { handle: "@sam.writes", title: "Word constellation", avatar: "photo-1501196354995-cbb51c65aaea", daily: 612, weekly: 5920, phase: 11290 },
-  { handle: "@mika.moves", title: "Moving meteor", avatar: "photo-1524504388940-b1c1722653e1", daily: 590, weekly: 5740, phase: 10960 },
-  { handle: "@ari.sunrise", title: "Dawn seeker", avatar: "photo-1507003211169-0a1dd7228f2d", daily: 570, weekly: 5510, phase: 10510 },
-  { handle: "@lee.reflects", title: "Inner galaxy", avatar: "photo-1506794778202-cad84cf45f1d", daily: 551, weekly: 5320, phase: 10120 },
-  { handle: "@noah.next", title: "New horizon", avatar: "photo-1500648767791-00dcc994a43e", daily: 530, weekly: 5100, phase: 9760 },
-];
-
 const bonusResources: Record<BonusType, BonusResource[]> = {
   ebook: [
     { title: "The 40-Day Blueprint", category: "Focus", description: "A gentle, step-by-step guide to build better habits and become your next self.", detail: "Printable guide  |  PDF", image: "photo-1506784983877-45594efa4cbe" },
@@ -749,6 +804,7 @@ export default function DashboardClient({
   userId,
   email,
   name,
+  avatarUrl,
   isAdmin,
   uploadedResources,
   initialStartDate,
@@ -761,6 +817,7 @@ export default function DashboardClient({
   userId: string;
   email: string;
   name: string;
+  avatarUrl: string;
   isAdmin: boolean;
   uploadedResources: UploadedBonusResource[];
   initialStartDate: string;
@@ -835,7 +892,10 @@ export default function DashboardClient({
   const [bonusSearchOpen, setBonusSearchOpen] = useState(false);
   const [bonusSearch, setBonusSearch] = useState("");
   const [leaderboardPeriod, setLeaderboardPeriod] = useState<LeaderboardPeriod>("weekly");
-  const [leaderboardPage, setLeaderboardPage] = useState(0);
+  const [coinLeaderboard, setCoinLeaderboard] = useState<CoinLeaderboardEntry[]>([]);
+  const [dailyLeaderboardRank, setDailyLeaderboardRank] = useState(0);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+  const [leaderboardError, setLeaderboardError] = useState("");
   const [language, setLanguage] = useState<Language>("en");
   const [toast, setToast] = useState("");
   const [hydrated, setHydrated] = useState(false);
@@ -920,6 +980,43 @@ export default function DashboardClient({
       active = false;
     };
   }, [hydrated, userId]);
+
+  useEffect(() => {
+    let active = true;
+    const period = leaderboardOpen && leaderboardPeriod !== "phase" ? leaderboardPeriod : "daily";
+    setLeaderboardLoading(true);
+    setLeaderboardError("");
+    setCoinLeaderboard([]);
+
+    async function loadLeaderboard() {
+      try {
+        const { data, error } = await createClient().rpc("get_coin_leaderboard", {
+          p_period: period,
+        });
+        if (error) throw new Error(error.message);
+        const entries = parseCoinLeaderboard(data);
+        if (active) {
+          setCoinLeaderboard(entries);
+          if (period === "daily") {
+            setDailyLeaderboardRank(entries.find((entry) => entry.userId === userId)?.rank ?? 0);
+          }
+        }
+      } catch (error) {
+        if (!active) return;
+        console.error("Unable to load coin leaderboard", error);
+        setCoinLeaderboard([]);
+        if (period === "daily") setDailyLeaderboardRank(0);
+        setLeaderboardError("The leaderboard could not be loaded. Please try again.");
+      } finally {
+        if (active) setLeaderboardLoading(false);
+      }
+    }
+
+    void loadLeaderboard();
+    return () => {
+      active = false;
+    };
+  }, [leaderboardOpen, leaderboardPeriod, userId]);
 
   useEffect(() => {
     return () => {
@@ -1047,9 +1144,6 @@ export default function DashboardClient({
     year: "numeric",
   });
   const dayNumber = Math.max(selectedDay, 1);
-  const dailyLeaderboardRank = [...leaderboard]
-    .sort((first, second) => second.daily - first.daily)
-    .findIndex((leader) => leader.handle === "@you") + 1;
   const completedPhaseDays = new Set(
     phaseDailyQuests
       .filter((quest) => completedPhaseQuestIds.includes(quest.id))
@@ -1058,18 +1152,22 @@ export default function DashboardClient({
   const canClaimCertificate = Array.from({ length: 40 }, (_, index) => index + 1)
     .every((day) => completedPhaseDays.has(day));
   const progress = Math.round((completed / Math.max(activeChallenges.length, 1)) * 100);
-  const rankedLeaders = useMemo(
-    () => [...leaderboard].sort((a, b) => b[leaderboardPeriod] - a[leaderboardPeriod]),
-    [leaderboardPeriod],
-  );
-  const dailyLeaders = useMemo(
-    () => [...leaderboard].sort((a, b) => b.daily - a.daily).slice(0, 3),
-    [],
-  );
-  const topLeaders = rankedLeaders.slice(0, 3);
-  const pageLeaders = rankedLeaders.slice(3 + leaderboardPage * 7, 10 + leaderboardPage * 7);
+  const dailyLeaders = leaderboardPeriod === "phase"
+    ? coinLeaderboard.filter((leader) => leader.rank <= 3)
+    : leaderboardPeriod === "daily"
+      ? coinLeaderboard.filter((leader) => leader.rank <= 3)
+      : [];
+  const showingDemoLeaderboard = !leaderboardLoading
+    && !leaderboardError
+    && coinLeaderboard.length === 0
+    && leaderboardPeriod !== "phase";
+  const displayedLeaderboard = showingDemoLeaderboard
+    ? getDemoCoinLeaderboard(leaderboardPeriod)
+    : coinLeaderboard;
+  const topLeaders = displayedLeaderboard.slice(0, 3);
+  const pageLeaders = displayedLeaderboard.filter((leader) => leader.rank >= 4 && leader.rank <= 10);
   const chartBounds = { left: 72, top: 20, width: 820, height: 270 };
-  const chartMaxValue = Math.max(1000, ...dailyLeaders.map((leader) => leader.daily), ...Object.values(dailyStardustByDay));
+  const chartMaxValue = Math.max(1000, ...dailyLeaders.map((leader) => leader.totalCoin), ...Object.values(dailyStardustByDay));
   const chartYMax = Math.ceil(chartMaxValue / 200) * 200;
   const chartX = (day: number) => chartBounds.left + ((day - 1) / 39) * chartBounds.width;
   const chartY = (score: number) => chartBounds.top + chartBounds.height - (score / chartYMax) * chartBounds.height;
@@ -2651,7 +2749,7 @@ export default function DashboardClient({
             <span className="profile-heading-spacer" />
           </header>
           <section className="profile-identity profile-panel">
-            <div className="profile-avatar-frame"><img src={gender === "woman" ? "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=360&h=360&q=85" : "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=360&h=360&q=85"} alt={t("Profile avatar")} /></div>
+            <div className="profile-avatar-frame"><img src={avatarUrl || (gender === "woman" ? "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=360&h=360&q=85" : "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=360&h=360&q=85")} alt={t("Profile avatar")} /></div>
             <div className="profile-identity-copy"><span className="profile-kicker">{t("YOUR COSMIC JOURNEY")}</span><h2>{profileName}</h2><span className="profile-handle">{email}</span><button className="profile-edit-button" onClick={() => setProfileDialog("edit")}>{t("Edit profile")} <Icon name="chevron" size={14} /></button></div>
             <div className="profile-stats">
               <div><Icon name="sparkles" size={18} /><span>{t("PHASE 1")}</span></div>
@@ -2839,7 +2937,7 @@ export default function DashboardClient({
         <main className="leaderboard-content shell" aria-labelledby="leaderboard-title">
           <div className="leaderboard-heading"><span className="eyebrow"><span className="eyebrow-line" /> {t("THE COSMIC COMMUNITY")}</span><h1 id="leaderboard-title">{t("Find your ")}<span>{t("orbit.")}</span></h1><p>{t("Every small step deserves a little stardust.")}</p></div>
           <div className="leaderboard-tabs" role="tablist" aria-label={t("Leaderboard period")}>
-            {(["daily", "weekly", "phase"] as const).map((period) => <button key={period} className={leaderboardPeriod === period ? "selected" : ""} role="tab" aria-selected={leaderboardPeriod === period} onClick={() => { setLeaderboardPeriod(period); setLeaderboardPage(0); }}>{t(period)}</button>)}
+            {(["daily", "weekly", "phase"] as const).map((period) => <button key={period} className={leaderboardPeriod === period ? "selected" : ""} role="tab" aria-selected={leaderboardPeriod === period} onClick={() => setLeaderboardPeriod(period)}>{t(period)}</button>)}
           </div>
           {leaderboardPeriod === "phase" ?           <section className="phase-progress-dashboard" aria-label={t("40-day progress dashboard")}>
             <div className="phase-progress-heading">
@@ -2878,8 +2976,8 @@ export default function DashboardClient({
                   <line className="chart-axis-line" x1={chartBounds.left} x2={chartBounds.left + chartBounds.width} y1={chartBounds.top + chartBounds.height} y2={chartBounds.top + chartBounds.height} />
                   {dailyLeaders.map((leader, index) => {
                     const colorClass = `leader-benchmark-${index + 1}`;
-                    const y = chartY(leader.daily);
-                    return <g className={colorClass} key={leader.handle}>
+                    const y = chartY(leader.totalCoin);
+                    return <g className={colorClass} key={leader.userId}>
                       <line className="leader-benchmark-line" x1={chartBounds.left} x2={chartBounds.left + chartBounds.width} y1={y} y2={y} />
                       <circle className="leader-benchmark-dot" cx={chartBounds.left + chartBounds.width} cy={y} r="4" />
                     </g>;
@@ -2896,39 +2994,45 @@ export default function DashboardClient({
               </div>
               <div className="chart-legend" aria-label={t("Chart lines")}>
                 <span className="chart-legend-item chart-user-legend"><i /> {t("You · daily stardust")}</span>
-                {dailyLeaders.map((leader, index) => <span className={`chart-legend-item chart-leader-legend leader-benchmark-${index + 1}`} key={leader.handle}>
-                  <i /> #{index + 1} {leader.handle} · {leader.daily.toLocaleString()} {t("benchmark")}
+                {dailyLeaders.map((leader, index) => <span className={`chart-legend-item chart-leader-legend leader-benchmark-${index + 1}`} key={leader.userId}>
+                  <i /> #{index + 1} {leader.displayName} · {leader.totalCoin.toLocaleString()} {t("benchmark")}
                 </span>)}
               </div>
               <p className="chart-data-note">{t("Your line records stardust from challenges you complete from now on; unrecorded days are left blank. Leader lines are today’s Daily scores used as comparison benchmarks, not historical records.")}</p>
             </div>
           </section> : <>
-            <section className="podium" aria-label={t("Top three players")}>
-              {[{ leader: topLeaders[1], rank: 2 }, { leader: topLeaders[0], rank: 1 }, { leader: topLeaders[2], rank: 3 }].map(({ leader, rank }) => <article className={`podium-player podium-${rank}`} key={leader.handle}>
-                <div className="podium-rank">{rank === 1 && <span className="crown">♛</span>}{rank}</div>
-                <div className="podium-avatar-wrap"><img src={`https://images.unsplash.com/${leader.avatar}?auto=format&fit=crop&w=240&h=240&q=80`} alt="" className="podium-avatar" /><span className="avatar-glow" /></div>
-                <strong>{leader.handle}</strong><span className="podium-title">{t(leader.title)}</span>
-                <div className="podium-score"><span className="leader-coin">✦</span>{leader[leaderboardPeriod].toLocaleString()}</div>
-              </article>)}
-            </section>
-            <section className="leader-list" aria-label={t("Leaderboard ranks")}>
-              {pageLeaders.map((leader, index) => {
-                const rank = index + 4 + leaderboardPage * 7;
-                const isYou = leader.handle === "@you";
-                return <article className={`leader-list-row ${isYou ? "you" : ""}`} key={leader.handle}>
-                  <span className="list-rank">{rank}</span>
-                  <img className="list-avatar" src={`https://images.unsplash.com/${leader.avatar}?auto=format&fit=crop&w=100&h=100&q=75`} alt="" />
-                  <span className="list-player">{leader.handle}<small>{isYou ? t("Your cosmic journey") : t(leader.title)}</small></span>
-                  <span className="list-score"><span className="leader-coin">✦</span><b>{leader[leaderboardPeriod].toLocaleString()}</b></span>
-                </article>;
-              })}
-            </section>
-            <div className="leaderboard-pagination">
-              {leaderboardPage > 0 && <button className="page-button previous" onClick={() => setLeaderboardPage((page) => Math.max(0, page - 1))}><Icon name="arrow" size={17} /> {t("PREVIOUS")}</button>}
-              <span>{t("PAGE ")}{leaderboardPage + 1} <i /> 2</span>
-              {leaderboardPage === 0 && <button className="page-button" onClick={() => setLeaderboardPage(1)}>{t("NEXT")} <Icon name="arrow" size={17} /></button>}
-              {leaderboardPage === 1 && <button className="page-button" onClick={() => { setLeaderboardOpen(false); jumpToChallenges(); }}>{t("BACK TO CHALLENGES")} <Icon name="arrow" size={17} /></button>}
-            </div>
+            <p className="leaderboard-period-note">{t(leaderboardPeriod === "daily" ? "Daily coin totals for the current day in WIB." : "Weekly coin totals for the last 7 days.")}</p>
+            {showingDemoLeaderboard && <p className="leaderboard-demo-note" role="note">{t("Demo leaderboard: these are fictional sample profiles and scores, not real JOolo members.")}</p>}
+            {leaderboardLoading
+              ? <p className="leaderboard-state" role="status">{t("Loading leaderboard...")}</p>
+              : leaderboardError
+                ? <p className="leaderboard-state is-error" role="alert">{t(leaderboardError)}</p>
+                : displayedLeaderboard.length === 0
+                  ? <p className="leaderboard-state">{t("No coins earned in this period yet.")}</p>
+                  : <>
+                    <p className="leaderboard-top-ten-note">{t(showingDemoLeaderboard ? "Top 10 demo profiles by sample coins." : "Top 10 members by total coins earned.")}</p>
+                    {topLeaders.length === 3 && <section className="podium" aria-label={t("Top three players")}>
+                      {[{ leader: topLeaders[1], rank: 2 }, { leader: topLeaders[0], rank: 1 }, { leader: topLeaders[2], rank: 3 }].map(({ leader, rank }) => (
+                        <article className={`podium-player podium-${rank}`} key={leader.userId}>
+                          <div className="podium-rank">{rank === 1 && <span className="crown">♛</span>}{rank}</div>
+                          <div className="podium-avatar-wrap"><Image src={leader.avatarUrl || (leader.gender === "man" ? "/AVATAR/Man/Ray.png" : "/AVATAR/Woman/Luna.png")} alt="" className="podium-avatar" width={240} height={240} sizes="(max-width: 560px) 105px, 138px" /><span className="avatar-glow" /></div>
+                          <strong>{leader.displayName || t("JOolo member")}</strong><span className="podium-title">{showingDemoLeaderboard ? t("Demo account") : t(leaderboardPeriod === "daily" ? "Daily coins" : "Weekly coins")}</span>
+                          <div className="podium-score"><span className="leader-coin">✦</span>{leader.totalCoin.toLocaleString()}</div>
+                        </article>
+                      ))}
+                    </section>}
+                    <section className="leader-list" aria-label={t("Leaderboard ranks")}>
+                      {(topLeaders.length < 3 ? topLeaders : pageLeaders).map((leader) => {
+                        const isYou = leader.userId === userId;
+                        return <article className={`leader-list-row ${isYou ? "you" : ""}`} key={leader.userId}>
+                          <span className="list-rank">{leader.rank}</span>
+                          <Image className="list-avatar" src={leader.avatarUrl || (leader.gender === "man" ? "/AVATAR/Man/Ray.png" : "/AVATAR/Woman/Luna.png")} alt="" width={100} height={100} sizes="48px" />
+                          <span className="list-player">{leader.displayName || t("JOolo member")}<small>{showingDemoLeaderboard ? t("Demo account") : isYou ? t("Your cosmic journey") : t(leaderboardPeriod === "daily" ? "Daily coins" : "Weekly coins")}</small></span>
+                          <span className="list-score"><span className="leader-coin">✦</span><b>{leader.totalCoin.toLocaleString()}</b></span>
+                        </article>;
+                      })}
+                    </section>
+                  </>}
           </>}
         </main>
       </div>}

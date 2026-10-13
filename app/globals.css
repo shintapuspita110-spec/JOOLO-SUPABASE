@@ -97,6 +97,11 @@ h1,h2,h3,p{margin-top:0}.hero-intro h1{font:800 clamp(36px,4.4vw,58px)/1.13 Manr
 .leaderboard-tabs button{border:0;border-radius:10px;background:transparent;color:#9eabc0;text-transform:capitalize;font:700 14px Manrope,sans-serif;cursor:pointer;transition:.2s}
 .leaderboard-tabs button:hover{color:#e8f9ff;background:rgba(90,207,213,.07)}
 .leaderboard-tabs button.selected{color:#f3ffff;background:linear-gradient(115deg,rgba(41,187,190,.82),rgba(109,91,180,.82));box-shadow:0 0 20px rgba(70,215,216,.18),inset 0 1px rgba(255,255,255,.22)}
+.leaderboard-period-note,.leaderboard-top-ten-note,.leaderboard-state{max-width:770px;margin:0 auto 13px;color:#9aa8c2;font-size:11px;line-height:1.55;text-align:center}
+.leaderboard-demo-note{max-width:770px;margin:0 auto 15px;padding:9px 14px;border:1px solid rgba(245,201,120,.4);border-radius:10px;background:rgba(245,201,120,.08);color:#f3d794;font-size:11px;line-height:1.5;text-align:center}
+.leaderboard-top-ten-note{margin-bottom:0;color:#8292a9;font-size:9px}
+.leaderboard-state{margin-top:32px;font-size:13px}
+.leaderboard-state.is-error{color:#ffb9c4}
 .podium{max-width:770px;min-height:340px;margin:0 auto 25px;display:grid;grid-template-columns:1fr 1.12fr 1fr;align-items:end;gap:14px;padding:15px 16px 0;position:relative}
 .podium:before{content:"";position:absolute;left:15%;right:15%;bottom:100px;height:160px;border-radius:50%;background:radial-gradient(ellipse,rgba(99,91,173,.13),transparent 68%);filter:blur(10px);pointer-events:none}
 .podium-player{display:flex;align-items:center;flex-direction:column;position:relative;z-index:1;text-align:center;min-width:0}
@@ -364,9 +369,18 @@ h1,h2,h3,p{margin-top:0}.hero-intro h1{font:800 clamp(36px,4.4vw,58px)/1.13 Manr
 .login-copy{max-width:330px;margin:0;color:#a4b2c8;font-size:13px;line-height:1.65}
 .login-form{display:grid;gap:9px;margin-top:27px}
 .login-form label{color:#aebed2;font-size:9px;font-weight:700;letter-spacing:1.4px}
-.login-form input{width:100%;height:49px;padding:0 14px;border:1px solid rgba(143,172,201,.28);border-radius:11px;background:rgba(5,13,26,.68);color:#effaff;font-size:13px;transition:border-color .2s,box-shadow .2s}
+.login-form input,.login-form select{width:100%;height:49px;padding:0 14px;border:1px solid rgba(143,172,201,.28);border-radius:11px;background:rgba(5,13,26,.68);color:#effaff;font-size:13px;transition:border-color .2s,box-shadow .2s}
+.login-form select:invalid{color:#71839c}
+.login-form select option{background:#101b2e;color:#effaff}
 .login-form input::placeholder{color:#71839c}
-.login-form input:focus{border-color:rgba(92,242,226,.75);box-shadow:0 0 0 3px rgba(92,242,226,.08);outline:0}
+.login-form input:focus,.login-form select:focus{border-color:rgba(92,242,226,.75);box-shadow:0 0 0 3px rgba(92,242,226,.08);outline:0}
+.signup-avatar-fieldset{min-width:0;margin:3px 0 5px;padding:0;border:0}
+.signup-avatar-fieldset legend{margin-bottom:9px}
+.signup-avatar-options{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}
+.signup-avatar-option{min-width:0;display:grid;justify-items:center;gap:6px;padding:7px 5px;border:1px solid rgba(143,172,201,.25);border-radius:11px;background:rgba(5,13,26,.48);color:#aebed2;font-size:10px;font-weight:700;cursor:pointer;transition:border-color .2s,background .2s,transform .2s}
+.signup-avatar-option:hover{transform:translateY(-2px);border-color:rgba(92,242,226,.55);color:#effaff}
+.signup-avatar-option.selected{border-color:var(--cyan);background:linear-gradient(145deg,rgba(38,166,171,.19),rgba(111,75,161,.18));color:#efffff;box-shadow:0 0 15px rgba(92,242,226,.12)}
+.signup-avatar-option img{display:block;width:100%;aspect-ratio:1;object-fit:cover;border-radius:50%;background:#101b2e}
 .login-form .save-username{position:relative;display:flex;align-items:center;gap:9px;width:max-content;margin:2px 0 3px;color:#aab9cd;font-size:11px;font-weight:500;letter-spacing:0;cursor:pointer}
 .save-username input{position:absolute;width:1px;height:1px;opacity:0}
 .save-username-check{width:16px;height:16px;display:grid;place-items:center;border:1px solid rgba(143,172,201,.42);border-radius:4px;background:rgba(5,13,26,.68);transition:.18s}
@@ -418,7 +432,7 @@ h1,h2,h3,p{margin-top:0}.hero-intro h1{font:800 clamp(36px,4.4vw,58px)/1.13 Manr
 .onboarding-demo-note{margin:0;color:#8191a9;font-size:9px;line-height:1.5}
 .onboarding-submit{margin-top:5px}
 .onboarding-card .login-footer{margin-top:21px;padding-top:14px}
-@media(max-width:560px){.login-screen{padding:20px 17px}.login-card{padding:31px 25px 24px;border-radius:19px}.login-orbit{top:30px;right:24px;width:57px;height:57px}.login-eyebrow{margin-top:59px;font-size:8px;letter-spacing:1.1px}.login-card h1{font-size:39px}.login-copy{font-size:12px}.login-form{margin-top:23px}.login-form input,.login-submit{height:47px}.login-footer{margin-top:24px;padding-top:16px}}
+@media(max-width:560px){.login-screen{padding:20px 17px}.login-card{padding:31px 25px 24px;border-radius:19px}.login-orbit{top:30px;right:24px;width:57px;height:57px}.login-eyebrow{margin-top:59px;font-size:8px;letter-spacing:1.1px}.login-card h1{font-size:39px}.login-copy{font-size:12px}.login-form{margin-top:23px}.login-form input,.login-form select,.login-submit{height:47px}.login-footer{margin-top:24px;padding-top:16px}}
 @media(max-width:900px){.certificate-confirmation-dialog{width:min(740px,100%);height:92svh;gap:14px;padding:22px;overflow-y:auto}.certificate-confirmation-copy{flex:none}.certificate-preview-pane{height:62svh;min-height:380px}.certificate-review-table-wrap{max-height:190px}}
 @media(max-width:560px){.certificate-confirmation-dialog{height:92svh;padding:23px 16px;gap:11px}.certificate-confirmation-copy h2{font-size:21px}.certificate-confirmation-copy>p{font-size:11px}.certificate-review-name{margin:11px 0;padding:10px}.certificate-review-table-wrap th,.certificate-review-table-wrap td{padding:6px;font-size:8px}.certificate-review-table-wrap thead th{font-size:7px}.certificate-review-table-wrap tbody th{min-width:112px}.certificate-confirmation-actions{bottom:-23px;gap:7px;padding-top:9px}.certificate-confirmation-actions>*{font-size:9px}.certificate-preview-pane{height:58svh;min-height:340px}.certificate-preview-badge{top:8px;left:8px;font-size:7px}}
 @media(max-width:560px){.day-40-actions{gap:9px;margin-top:17px}.day-40-action-button{min-height:50px;gap:8px;padding:11px 10px;font-size:12px}.completion-dialog{padding:27px 21px;max-height:90svh}.claimed-certificate{padding:20px 13px 18px}.claimed-certificate h2{font-size:20px}}

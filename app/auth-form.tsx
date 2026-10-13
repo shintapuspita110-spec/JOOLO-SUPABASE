@@ -1,17 +1,36 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 type AuthFormProps = { mode: "login" | "signup" };
+type SignupGender = "woman" | "man";
+
+const signupAvatars: Record<SignupGender, Array<{ name: string; src: string }>> = {
+  woman: [
+    { name: "Luna", src: "/AVATAR/Woman/Luna.png" },
+    { name: "Rosie", src: "/AVATAR/Woman/Rosie.png" },
+    { name: "Stella", src: "/AVATAR/Woman/Stella.png" },
+    { name: "Aurora", src: "/AVATAR/Woman/Aurora.png" },
+  ],
+  man: [
+    { name: "Ray", src: "/AVATAR/Man/Ray.png" },
+    { name: "Atlas", src: "/AVATAR/Man/Atlas.png" },
+    { name: "Finn", src: "/AVATAR/Man/Finn.png" },
+    { name: "Cosmo", src: "/AVATAR/Man/Cosmo.png" },
+  ],
+};
 
 export default function AuthForm({ mode }: AuthFormProps) {
   const router = useRouter();
   const isSignup = mode === "signup";
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [gender, setGender] = useState<SignupGender | "">("");
+  const [avatarUrl, setAvatarUrl] = useState("");
   const configured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
   useEffect(() => {
@@ -53,11 +72,22 @@ export default function AuthForm({ mode }: AuthFormProps) {
       const supabase = createClient();
       if (isSignup) {
         const fullName = String(form.get("fullName") ?? "").trim();
+        const genderValue = String(form.get("gender") ?? "");
+        const selectedGender = genderValue === "woman" || genderValue === "man" ? genderValue : null;
+        const ageRange = String(form.get("ageRange") ?? "");
+        if (
+          !selectedGender
+          || !["<18", "18-25", ">25"].includes(ageRange)
+          || !signupAvatars[selectedGender].some((avatar) => avatar.src === avatarUrl)
+        ) {
+          setMessage("Please select a gender, avatar, and age range.");
+          return;
+        }
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
-            data: { full_name: fullName },
+            data: { full_name: fullName, gender: selectedGender, age_range: ageRange, avatar_url: avatarUrl },
             emailRedirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
           },
         });
@@ -106,6 +136,41 @@ export default function AuthForm({ mode }: AuthFormProps) {
           {isSignup && <>
             <label htmlFor="auth-name">FULL NAME</label>
             <input id="auth-name" name="fullName" type="text" autoComplete="name" placeholder="Your name" maxLength={60} required />
+            <label htmlFor="auth-gender">GENDER</label>
+            <select id="auth-gender" name="gender" value={gender} onChange={(event) => {
+              const value = event.currentTarget.value;
+              setGender(value === "woman" || value === "man" ? value : "");
+              setAvatarUrl("");
+            }} required>
+              <option value="" disabled>Select gender</option>
+              <option value="woman">Woman</option>
+              <option value="man">Man</option>
+            </select>
+            {gender && <fieldset className="signup-avatar-fieldset">
+              <legend>CHOOSE YOUR AVATAR</legend>
+              <div className="signup-avatar-options">
+                {signupAvatars[gender].map((avatar) => (
+                  <button
+                    className={`signup-avatar-option ${avatarUrl === avatar.src ? "selected" : ""}`}
+                    type="button"
+                    key={avatar.src}
+                    aria-label={`Choose ${avatar.name} as your profile avatar`}
+                    aria-pressed={avatarUrl === avatar.src}
+                    onClick={() => setAvatarUrl(avatar.src)}
+                  >
+                    <Image src={avatar.src} alt="" loading="lazy" decoding="async" width={128} height={128} sizes="(max-width: 560px) 22vw, 100px" />
+                    <span>{avatar.name}</span>
+                  </button>
+                ))}
+              </div>
+            </fieldset>}
+            <label htmlFor="auth-age-range">AGE</label>
+            <select id="auth-age-range" name="ageRange" defaultValue="" required>
+              <option value="" disabled>Select age range</option>
+              <option value="&lt;18">&lt;18</option>
+              <option value="18-25">18-25</option>
+              <option value="&gt;25">&gt;25</option>
+            </select>
           </>}
           <label htmlFor="auth-email">EMAIL ADDRESS</label>
           <input id="auth-email" name="email" type="email" autoComplete="email" placeholder="you@example.com" required />
