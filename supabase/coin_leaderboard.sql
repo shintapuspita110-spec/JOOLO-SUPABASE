@@ -314,7 +314,7 @@ begin
     ranked_users as (
       select
         totals.user_id,
-        coalesce(nullif(btrim(profile.full_name), ''), test_profile.display_name, 'JOolo member') as display_name,
+        coalesce(nullif(btrim(profile.full_name), ''), test_profile.display_name, 'JOOLO member') as display_name,
         coalesce(profile.avatar_url, test_profile.avatar_url) as avatar_url,
         coalesce(profile.gender, test_profile.gender) as gender,
         totals.total_coin,

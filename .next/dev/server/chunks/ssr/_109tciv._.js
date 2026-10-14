@@ -12,7 +12,7 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist
 ;
 ;
 const metadata = {
-    title: "JOolo — Your next chapter starts here",
+    title: "JOOLO — Your next chapter starts here",
     description: "A 40-day cosmic self-growth challenge. Small steps, stellar progress."
 };
 function RootLayout({ children }) {

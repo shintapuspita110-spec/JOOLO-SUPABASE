@@ -106,7 +106,7 @@ export default async function DashboardPage() {
     <DashboardClient
       userId={user.id}
       email={profile?.email ?? user.email ?? ""}
-      name={profile?.full_name || (typeof metadataName === "string" ? metadataName : "") || user.email?.split("@")[0] || "JOolo member"}
+      name={profile?.full_name || (typeof metadataName === "string" ? metadataName : "") || user.email?.split("@")[0] || "JOOLO member"}
       avatarUrl={profile?.avatar_url ?? ""}
       isAdmin={profile?.role === "admin"}
       uploadedResources={(bonusResources ?? []) as UploadedBonusResource[]}

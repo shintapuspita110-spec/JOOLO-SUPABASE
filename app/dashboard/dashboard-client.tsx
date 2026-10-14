@@ -4,11 +4,64 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { PDFDocument, PDFName, PDFRawStream, StandardFonts, decodePDFRawStream, rgb } from "pdf-lib";
-import { strToU8, zipSync } from "fflate";
 import { createClient } from "@/lib/supabase/client";
 import type { BonusType, UploadedBonusResource } from "@/lib/bonus";
 import type { PhaseDailyQuest, PhaseQuestProgress } from "@/lib/phase-quests";
 import type { UserDailyQuest } from "@/lib/user-daily-quests";
+
+function getBonusCoverImageSources(imageUrl: string): string[] {
+  try {
+    const url = new URL(imageUrl);
+    if (
+      url.protocol !== "https:"
+      || (url.hostname !== "drive.google.com" && url.hostname !== "lh3.googleusercontent.com")
+    ) {
+      return [imageUrl];
+    }
+
+    const fileId = url.pathname.match(/^\/file\/d\/([^/]+)/)?.[1]
+      ?? url.pathname.match(/^\/d\/([^=]+)/)?.[1]
+      ?? url.searchParams.get("id");
+    if (!fileId || !/^[A-Za-z0-9_-]+$/.test(fileId)) return [imageUrl];
+
+    const encodedFileId = encodeURIComponent(fileId);
+    return [
+      `/api/bonus-cover?id=${encodedFileId}`,
+      `https://lh3.googleusercontent.com/d/${encodedFileId}=w1200`,
+      `https://drive.google.com/thumbnail?id=${encodedFileId}&sz=w1200`,
+      `https://drive.google.com/uc?export=view&id=${encodedFileId}`,
+      imageUrl,
+    ];
+  } catch {
+    return [imageUrl];
+  }
+}
+
+function BonusCoverImage({ imageUrl }: { imageUrl: string }) {
+  const imageSources = getBonusCoverImageSources(imageUrl);
+  const [sourceIndex, setSourceIndex] = useState(0);
+
+  if (sourceIndex >= imageSources.length) {
+    return <span className="bonus-cover-unavailable">Sampul tidak dapat dimuat</span>;
+  }
+
+  return (
+    <img
+      className="bonus-cover-image"
+      src={imageSources[sourceIndex]}
+      alt=""
+      aria-hidden="true"
+      onError={() => {
+        if (sourceIndex + 1 < imageSources.length) {
+          setSourceIndex(sourceIndex + 1);
+        } else {
+          console.error("Could not load bonus cover image", imageUrl);
+          setSourceIndex(imageSources.length);
+        }
+      }}
+    />
+  );
+}
 
 type Gender = "woman" | "man";
 type Language = "en" | "id";
@@ -54,7 +107,6 @@ function parseCoinLeaderboard(value: unknown): CoinLeaderboardEntry[] {
     };
   });
 }
-type BonusResource = { title: string; category: string; description: string; detail: string; image: string; rows?: string[][] };
 type ProfileDialog = "edit" | "reset" | "certificate" | "feedback" | "logout" | null;
 type CompletionDialog = "certificate" | null;
 type ProfileTheme = "dark" | "light";
@@ -233,9 +285,11 @@ const indonesianTranslations: Record<string, string> = {
   "Save profile": "Simpan profil",
   "A FRESH ORBIT": "AWAL YANG BARU",
   "Reset your journey?": "Atur ulang perjalanan Anda?",
-  "This clears your saved challenges, coins, and preferences on this device. This can’t be undone.": "Tindakan ini menghapus tantangan, koin, dan preferensi tersimpan di perangkat ini. Tindakan ini tidak dapat dibatalkan.",
+  "This clears your saved challenge progress, custom challenges, coins, and preferences, then starts a new 40-day challenge with 7 lives. This can’t be undone.": "Tindakan ini menghapus progres tantangan tersimpan, tantangan kustom, koin, dan preferensi, lalu memulai tantangan 40 hari baru dengan 7 nyawa. Tindakan ini tidak dapat dibatalkan.",
   "Keep my progress": "Pertahankan progres",
   "Reset everything": "Atur ulang semuanya",
+  "Resetting...": "Mengatur ulang...",
+  "Your journey has been reset. A new 40-day challenge starts today with 7 lives.": "Perjalanan Anda telah diatur ulang. Tantangan 40 hari baru dimulai hari ini dengan 7 nyawa.",
   "YOUR NEXT MILESTONE": "PENCAPAIAN BERIKUTNYA",
   "Your 40-day orbit awaits.": "Perjalanan 40 hari Anda menanti.",
   "Reach Day 40 and complete all your daily challenges to unlock your certificate.": "Capai Hari ke-40 dan selesaikan semua tantangan harian untuk membuka sertifikat.",
@@ -264,6 +318,47 @@ const indonesianTranslations: Record<string, string> = {
   "Enter your unit (e.g. chapters)": "Masukkan satuan (cth. bab)",
   "Back to challenges": "Kembali ke tantangan",
   "APP GUIDE": "PANDUAN APLIKASI",
+  "Your JOOLO Guide": "Panduan JOOLO",
+  "A clearer map for your 40-day journey.": "Panduan ringkas untuk perjalanan 40 hari Anda.",
+  "Back to profile": "Kembali ke profil",
+  "Why 40 Days and Six Phases?": "Mengapa Harus 40 Hari dan Dibagi Menjadi 6 Fase?",
+  "JOOLO uses 40 days as an ideal period for an identity shift and for building new neural pathways in the brain. To make this transformation feel manageable and easier to carry out, the 40-day journey is divided into six consecutive phases:": "Secara psikologis, angka 40 hari adalah durasi yang sangat ideal untuk menciptakan identity shift (pergeseran identitas) dan membangun jalur saraf baru (neural pathways) di otak. Agar proses transformasi ini tidak terasa berat dan mudah dieksekusi, perjalanan 40 hari dipecah ke dalam 6 fase berurutan dengan penjelasan sebagai berikut:",
+  "Phase 1: Awakening (Days 1 - 4)": "Fase 1: Awakening (Hari 1 - 4)",
+  "Change cannot begin without awareness. In this initial phase, you are invited to pause, map your real situation (where you are now), and find your “Why” (the deep reason) this challenge matters. Without this awareness, efforts to change in the following days can feel like walking without a compass.": "Perubahan tidak bisa dimulai tanpa kesadaran. Pada fase awal ini, Anda diajak berhenti sejenak untuk memetakan kondisi nyata (di mana Anda sekarang) dan menemukan “Why” (alasan mendalam) mengapa tantangan ini penting. Tanpa kesadaran ini, usaha perubahan di hari-hari selanjutnya akan terasa seperti berjalan tanpa kompas.",
+  "Phase 2: Reprogramming (Days 5 - 7)": "Fase 2: Reprogramming (Hari 5 - 7)",
+  "Once you are aware of what needs to change, the brain begins responding by forming new thought and action patterns (reprogramming). In this phase, the biggest obstacles are distractions from your environment and old habits. The main focus is to break the chain of bad habits and begin planting new, consistent micro-routines.": "Setelah sadar akan apa yang perlu diubah, otak mulai merespons dengan membentuk pola pikir dan tindakan baru (reprogramming). Di fase ini, hambatan terbesar adalah gangguan dari lingkungan dan kebiasaan lama. Fokus utamanya adalah memutus rantai kebiasaan buruk dan mulai menanamkan mikro-rutinitas baru yang konsisten.",
+  "Phase 3: Focus & Discipline (Days 8 - 14)": "Fase 3: Focus & Discipline (Hari 8 - 14)",
+  "As you enter the second week, initial motivation may begin to fade and laziness may appear. This is where discipline takes over from motivation. This phase is designed to train your focus and overcome procrastination, helping you stay productive even when you do not feel “motivated.”": "Memasuki minggu kedua, motivasi awal biasanya mulai menurun dan rasa malas mulai muncul. Di sinilah disiplin mengambil alih motivasi. Fase ini dirancang untuk melatih otot fokus dan mengatasi penundaan (procrastination), memastikan Anda tetap produktif meskipun tidak sedang \"bersemangat\".",
+  "Phase 4: Emotional Mastery (Days 15 - 21)": "Fase 4: Emotional Mastery (Hari 15 - 21)",
+  "The biggest challenge to consistency is not physical, but emotional (such as stress, anxiety, boredom, or frustration that can trigger emotional eating or relapse). This midpoint phase is crucial for learning to manage emotions so you are not controlled by momentary impulses, strengthening your mental resilience.": "Tantangan terbesar dalam konsistensi bukanlah faktor fisik, melainkan faktor emosional (seperti stres, cemas, bosan, atau frustrasi yang memicu emotional eating atau relapse). Fase pertengahan ini krusial untuk mengajarkan cara mengelola emosi agar tidak dikendalikan oleh impuls sesaat, sehingga ketahanan mental Anda semakin kuat.",
+  "Phase 5: Growth Expansion (Days 22 - 28)": "Fase 5: Growth Expansion (Hari 22 - 28)",
+  "When the foundations of habits, discipline, and emotions begin to stabilize, it is time to expand your capacity (expansion). In this phase, you are encouraged to step outside your comfort zone, raise your standards of living, make bolder decisions, and align your actions with a bigger vision for the future.": "Ketika fondasi kebiasaan, disiplin, dan emosi mulai stabil, saatnya untuk memperluas kapasitas diri (expansion). Di fase ini, Anda didorong untuk keluar dari zona nyaman, meningkatkan standar hidup, mengambil keputusan yang lebih berani, dan menyelaraskan tindakan dengan visi masa depan yang lebih besar.",
+  "Phase 6: Final Transformation (Days 29 - 40)": "Fase 6: Final Transformation (Hari 29 - 40)",
+  "This final phase is a time to harvest results while locking in your new identity. Transformation does not stop on day 40; therefore, this phase focuses on reviewing the journey, celebrating progress, and designing a maintenance plan so the change can last and become a new lifestyle.": "Fase penutup ini adalah masa pemanenan hasil sekaligus penguncian identitas baru. Transformasi tidak berhenti di hari ke-40; oleh karena itu, fase ini berfokus pada evaluasi perjalanan, merayakan progres, dan merancang sistem keberlanjutan (maintenance plan) agar perubahan ini permanen dan menjadi gaya hidup baru selamanya.",
+  "What is a Phase?": "Apa itu Phase?",
+  "Your 40-day journey is organized into six progressive Phases. Each Phase groups daily challenges around a theme, so you can build habits step by step instead of trying to change everything at once. Select a day on the challenge map to see that day’s Phase and activities.": "Perjalanan 40 hari Anda dibagi menjadi enam Phase yang berurutan. Setiap Phase mengelompokkan tantangan harian berdasarkan tema, sehingga Anda dapat membangun kebiasaan secara bertahap. Pilih hari pada peta tantangan untuk melihat Phase dan aktivitas hari tersebut.",
+  "How do Phases build soft skills?": "Bagaimana Phase membangun soft skills?",
+  "Soft skills are abilities such as self-awareness, focus, discipline, and resilience. Each Phase emphasizes a related skill area, and its daily activities give you practical ways to practice those abilities. Completing activities consistently helps you reflect on and strengthen those skills over time; the activities are practice, not a formal psychological assessment.": "Soft skills adalah kemampuan seperti kesadaran diri, fokus, disiplin, dan ketahanan diri. Setiap Phase menekankan area keterampilan yang terkait, lalu aktivitas hariannya memberi cara praktis untuk melatih kemampuan tersebut. Menyelesaikan aktivitas secara konsisten membantu Anda merefleksikan dan mengembangkan keterampilan itu dari waktu ke waktu.",
+  "The six skill areas": "Enam area keterampilan",
+  "Self-Awareness, Emotional Regulation & Personal Accountability": "Kesadaran diri, regulasi emosi, dan tanggung jawab pribadi",
+  "Systems Thinking, Discipline & Operational Efficiency": "Berpikir sistem, disiplin, dan efisiensi operasional",
+  "Focus Mastery, Task Initiation & Time Management": "Penguasaan fokus, memulai tugas, dan manajemen waktu",
+  "Resilience, Cognitive Flexibility & Emotional Boundaries": "Ketahanan diri, fleksibilitas berpikir, dan batasan emosional",
+  "Growth Mindset, Risk Appetite & Decision-Making": "Pola pikir berkembang, kesiapan mengambil risiko, dan pengambilan keputusan",
+  "Strategic Planning, Sustainability & Self-Governance": "Perencanaan strategis, keberlanjutan, dan pengelolaan diri",
+  "How are coins calculated?": "Bagaimana koin dihitung?",
+  "Coins are awarded when you mark a challenge complete. Phase challenges have a base reward shown on the card: Easy = 10, Medium = 20, and Hard = 30 coins. If the challenge has a measurable target and you record reaching that target, you earn 10 bonus coins.": "Koin diberikan saat Anda menandai tantangan sebagai selesai. Tantangan Phase memiliki hadiah dasar yang ditampilkan pada kartu: Easy = 10, Medium = 20, dan Hard = 30 koin. Jika tantangan memiliki target terukur dan Anda mencatat bahwa target tersebut tercapai, Anda mendapat bonus 10 koin.",
+  "Custom challenges use the same difficulty rewards and can also earn the 10-coin target bonus. An incomplete challenge earns no coins. Your total balance adds up coins earned from completed Phase and custom challenges; it can also change when coins are spent to restore a life.": "Tantangan kustom menggunakan hadiah berdasarkan tingkat kesulitan yang sama dan juga bisa mendapat bonus target 10 koin. Tantangan yang belum selesai tidak menghasilkan koin. Saldo total Anda menjumlahkan koin dari tantangan Phase dan kustom yang selesai; saldo juga dapat berubah saat koin digunakan untuk memulihkan nyawa.",
+  "Example: completing a Medium challenge earns 20 coins; completing its full recorded target earns 30 coins in total.": "Contoh: menyelesaikan tantangan Medium memberi 20 koin; jika target yang dicatat tercapai, totalnya menjadi 30 koin.",
+  "How do Total Lives work?": "Bagaimana Total Lives bekerja?",
+  "You start each 40-day challenge with 7 lives. At least one Phase or custom challenge scheduled for a day must be completed that day to keep your lives. If none is completed by the end of that day, you lose 1 life. The app checks closed challenge days using your local time zone.": "Anda memulai setiap tantangan 40 hari dengan 7 nyawa. Selesaikan setidaknya satu tantangan Phase atau tantangan kustom yang dijadwalkan pada hari tersebut agar nyawa tetap. Jika tidak ada yang selesai hingga hari itu berakhir, 1 nyawa berkurang. Aplikasi memeriksa hari tantangan yang sudah berakhir berdasarkan zona waktu lokal Anda.",
+  "What happens when lives reach zero?": "Apa yang terjadi saat nyawa mencapai nol?",
+  "When a missed day uses your last life, the app automatically spends 250 coins to restore 1 life if your balance has at least 250 coins. Your challenge continues with the remaining balance reduced by 250 coins.": "Jika satu hari yang terlewat menghabiskan nyawa terakhir, aplikasi otomatis menggunakan 250 koin untuk memulihkan 1 nyawa jika saldo Anda mencukupi. Tantangan berlanjut dan saldo berkurang 250 koin.",
+  "If your balance is below 250 coins when lives run out, an automatic reset starts a new 40-day challenge that day with 7 lives. It clears saved Phase progress and custom challenges, and resets your coin balance to zero. This cannot be undone.": "Jika saldo kurang dari 250 koin saat nyawa habis, autoreset memulai tantangan 40 hari baru pada hari itu dengan 7 nyawa. Progres Phase dan tantangan kustom yang tersimpan dihapus, serta saldo koin diatur menjadi nol. Tindakan ini tidak dapat dibatalkan.",
+  "How do I claim my certificate?": "Bagaimana cara mengklaim sertifikat?",
+  "Reach Day 40 and complete at least one Phase challenge on every one of the 40 days. Custom challenges alone do not count toward this certificate requirement.": "Capai Hari ke-40 dan selesaikan setidaknya satu tantangan Phase pada setiap hari dari 40 hari. Tantangan kustom saja tidak dihitung untuk memenuhi syarat sertifikat ini.",
+  "Open the certificate action on Day 40 to preview your certificate. Before claiming, review the name and six soft-skill scores; you can update your profile name if needed. The preview is not yet an issued certificate.": "Buka tombol sertifikat pada Hari ke-40 untuk melihat pratinjau sertifikat. Sebelum mengklaim, periksa nama dan enam skor soft skills; Anda dapat memperbarui nama profil jika diperlukan. Pratinjau tersebut belum merupakan sertifikat yang diterbitkan.",
+  "Confirm and download to issue your certificate. It can only be claimed once. Afterward, you can preview the issued certificate and download it again, but you cannot issue another certificate for the same account.": "Konfirmasikan dan unduh untuk menerbitkan sertifikat. Sertifikat hanya dapat diklaim satu kali. Setelah itu, Anda dapat melihat pratinjau sertifikat terbit dan mengunduhnya kembali, tetapi tidak dapat menerbitkan sertifikat kedua untuk akun yang sama.",
   "How to Use": "Cara Menggunakan",
   "Points Explained": "Penjelasan Poin",
   "SUPPORT": "DUKUNGAN",
@@ -346,7 +441,7 @@ const indonesianTranslations: Record<string, string> = {
   "Weekly coin totals for the last 7 days.": "Total koin mingguan selama 7 hari terakhir.",
   "Daily coins": "Koin harian",
   "Weekly coins": "Koin mingguan",
-  "JOolo member": "Anggota JOolo",
+  "JOOLO member": "Anggota JOOLO",
   "Claim your completion certificate": "Klaim sertifikat penyelesaian",
   "Certificate Claimed": "Sertifikat Diklaim",
   "Claim Certificate": "Klaim Sertifikat",
@@ -431,7 +526,7 @@ const indonesianTranslations: Record<string, string> = {
   "Try a different title or category.": "Coba judul atau kategori lain.",
   "Clear search": "Hapus pencarian",
   "Back to your journey ↑": "Kembali ke perjalanan ↑",
-  "THE COSMIC COMMUNITY": "KOMUNITAS JOolo",
+  "THE COSMIC COMMUNITY": "KOMUNITAS JOOLO",
   "SCORE": "SKOR",
   "Find your ": "Temukan ",
   "orbit.": "lingkaran Anda.",
@@ -476,7 +571,7 @@ const indonesianTranslations: Record<string, string> = {
   " CHALLENGES COMPLETE": " TANTANGAN SELESAI",
   "Your milestone is saved in your journey on this device.": "Pencapaian Anda tersimpan di perangkat ini.",
   "Your 40-day journey is complete. This certificate has been added to your milestones.": "Perjalanan 40 hari Anda selesai. Sertifikat ini telah ditambahkan ke pencapaian Anda.",
-  "JOolo home": "Beranda JOolo",
+  "JOOLO home": "Beranda JOOLO",
   "PHASE 1": "FASE 1",
   "Choose a day on your 40-day map, complete a small daily challenge, and collect coins as you build consistency. Your progress is saved on this device.": "Pilih hari pada peta 40 hari, selesaikan tantangan harian kecil, dan kumpulkan koin sambil membangun konsistensi. Progres Anda tersimpan di perangkat ini.",
   "Each completed challenge earns the coins shown on its card. Your balance appears here and on your journey dashboard.": "Setiap tantangan yang diselesaikan memberi koin sesuai jumlah pada kartunya. Saldo Anda ditampilkan di sini dan pada dasbor perjalanan.",
@@ -488,11 +583,11 @@ const indonesianTranslations: Record<string, string> = {
   "Your journey data has been reset.": "Data perjalanan Anda berhasil diatur ulang.",
   "Challenge start date saved to your account.": "Tanggal mulai tantangan berhasil disimpan ke akun Anda.",
   "Profile updated.": "Profil berhasil diperbarui.",
-  "Thanks for helping JOolo grow!": "Terima kasih telah membantu JOolo berkembang!",
+  "Thanks for helping JOOLO grow!": "Terima kasih telah membantu JOOLO berkembang!",
   "Certificate could not be generated. Please try again.": "Sertifikat gagal dibuat. Silakan coba lagi.",
   "COMPLETION CERTIFICATE": "SERTIFIKAT PENYELESAIAN",
   "THIS CERTIFICATE IS PROUDLY PRESENTED TO": "SERTIFIKAT INI DIBERIKAN KEPADA",
-  "for completing the JOolo 40-day challenge": "atas keberhasilan menyelesaikan tantangan JOolo 40 hari",
+  "for completing the JOOLO 40-day challenge": "atas keberhasilan menyelesaikan tantangan JOOLO 40 hari",
   "40-DAY CHALLENGE · COMPLETED": "TANTANGAN 40 HARI · SELESAI",
   "Issued": "Diterbitkan",
   "SOFT SKILLS ASSESSMENT": "PENILAIAN SOFT SKILLS",
@@ -504,6 +599,14 @@ const indonesianTranslations: Record<string, string> = {
   "Formula: earned coin ÷ max possible coin × 100": "Rumus: koin diperoleh ÷ koin maksimal × 100",
   "Page 2 of 2": "Halaman 2 dari 2",
   "Claim certificate": "Klaim sertifikat",
+  "Preview certificate": "Pratinjau sertifikat",
+  "View certificate": "Lihat sertifikat",
+  "Preview your certificate": "Pratinjau sertifikat Anda",
+  "Complete all 40 days to unlock certificate claiming and download.": "Selesaikan seluruh 40 hari untuk membuka klaim dan unduhan sertifikat.",
+  "This is your issued certificate. You can download it again below.": "Ini adalah sertifikat yang telah diterbitkan. Anda dapat mengunduhnya kembali di bawah.",
+  "ISSUED CERTIFICATE · PREVIEW": "SERTIFIKAT TERBIT · PRATINJAU",
+  "Close preview": "Tutup pratinjau",
+  "Download certificate": "Unduh sertifikat",
   "Download certificate again": "Unduh sertifikat lagi",
   "Certificate already claimed": "Sertifikat sudah diklaim",
   "The original certificate details are unavailable, so it cannot be safely regenerated.": "Detail sertifikat asli tidak tersedia, jadi sertifikat tidak dapat dibuat ulang dengan aman.",
@@ -723,21 +826,6 @@ const initialChallenges: Challenge[] = [
   },
 ];
 
-const bonusResources: Record<BonusType, BonusResource[]> = {
-  ebook: [
-    { title: "The 40-Day Blueprint", category: "Focus", description: "A gentle, step-by-step guide to build better habits and become your next self.", detail: "Printable guide  |  PDF", image: "photo-1506784983877-45594efa4cbe" },
-    { title: "Morning, Made Meaningful", category: "Productivity", description: "Create a calmer, more intentional morning with rituals that actually stick.", detail: "Printable guide  |  PDF", image: "photo-1497250681960-ef046c08a56e" },
-    { title: "Mind Over Momentum", category: "Mindset", description: "Find your way forward when motivation gets quiet and life gets loud.", detail: "Printable guide  |  PDF", image: "photo-1519682337058-a94d519337bc" },
-    { title: "Small Steps, Stronger Self", category: "Fitness", description: "Simple movement plans to feel stronger, more energized, and at home in your body.", detail: "Printable guide  |  PDF", image: "photo-1518611012118-696072aa579a" },
-  ],
-  tracker: [
-    { title: "40-Day Habit Tracker", category: "Habit", description: "Track your daily rituals and celebrate every streak across your 40-day challenge.", detail: "40-day planner  |  XLSX", image: "photo-1454165804606-c3d57bc86b40", rows: [["Day", "Morning ritual", "Move your body", "Read 10 pages", "Gratitude note", "Notes"]] },
-    { title: "Weekly Movement Log", category: "Fitness", description: "Record your workouts, movement minutes, and energy levels each week.", detail: "Weekly planner  |  XLSX", image: "photo-1461896836934-ffe607ba8211", rows: [["Day", "Activity", "Minutes", "Energy (1-5)", "Notes"]] },
-    { title: "Study & Focus Planner", category: "Study", description: "Plan your learning sessions, focus blocks, and small wins for the week.", detail: "Weekly planner  |  XLSX", image: "photo-1456324504439-367cee3b3c32", rows: [["Date", "Subject", "Focus goal", "Minutes", "Completed", "Reflection"]] },
-    { title: "Mindful Spending Tracker", category: "Finance", description: "Bring intention to spending, saving, and the goals that matter to you.", detail: "Spending planner  |  XLSX", image: "photo-1460925895917-afdab827c52f", rows: [["Date", "Category", "Description", "Amount", "Need or want", "Notes"]] },
-  ],
-};
-
 function Icon({ name, size = 20 }: { name: string; size?: number }) {
   const common = { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
   const paths: Record<string, React.ReactNode> = {
@@ -777,10 +865,6 @@ function readStored<T>(key: string, fallback: T, userId: string): T {
   }
 }
 
-function escapeXml(value: string) {
-  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&apos;");
-}
-
 export default function DashboardClient({
   userId,
   email,
@@ -813,6 +897,7 @@ export default function DashboardClient({
   const [challenges, setChallenges] = useState<Challenge[]>(initialChallenges);
   const [selectedDay, setSelectedDay] = useState(1);
   const [journeyStartDate, setJourneyStartDate] = useState(initialStartDate);
+  const currentChallengeDay = getCurrentChallengeDay(journeyStartDate);
   const [lives, setLives] = useState(initialLives);
   const [dailyStardustByDay, setDailyStardustByDay] = useState<Record<string, number>>({});
   const [challengeCompletionDays, setChallengeCompletionDays] = useState<Record<string, number>>({});
@@ -865,10 +950,11 @@ export default function DashboardClient({
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
   const [bonusOpen, setBonusOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [appGuideOpen, setAppGuideOpen] = useState(false);
   const [profileDialog, setProfileDialog] = useState<ProfileDialog>(null);
+  const [resetSaving, setResetSaving] = useState(false);
   const [profileName, setProfileName] = useState(name);
   const [profileTheme, setProfileTheme] = useState<ProfileTheme>("dark");
-  const [expandedGuide, setExpandedGuide] = useState<"how" | "points" | null>(null);
   const [bonusType, setBonusType] = useState<BonusType>("ebook");
   const [bonusSearchOpen, setBonusSearchOpen] = useState(false);
   const [bonusSearch, setBonusSearch] = useState("");
@@ -908,6 +994,7 @@ export default function DashboardClient({
     setProfileName(readStored<string>("joolo-profile-name", name, userId));
     setProfileTheme(readStored<ProfileTheme>("joolo-profile-theme", "dark", userId));
     setLanguage(readStored<Language>("joolo-language", "en", userId));
+    setSelectedDay((previousDay) => previousDay === 1 ? getCurrentChallengeDay(initialStartDate) : previousDay);
     setHydrated(true);
   }, [userId, name, initialStartDate, initialCoins]);
 
@@ -921,6 +1008,11 @@ export default function DashboardClient({
     localStorage.setItem(`${userId}:joolo-profile-theme`, JSON.stringify(profileTheme));
     localStorage.setItem(`${userId}:joolo-language`, JSON.stringify(language));
   }, [gender, challenges, dailyStardustByDay, challengeCompletionDays, coins, profileName, profileTheme, language, hydrated, userId]);
+
+  useEffect(() => {
+    document.body.classList.toggle("dashboard-light", hydrated && profileTheme === "light");
+    return () => document.body.classList.remove("dashboard-light");
+  }, [hydrated, profileTheme]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -1115,7 +1207,8 @@ export default function DashboardClient({
       };
     });
   const selectedPhase = phaseDailyQuests.find((quest) => quest.day_number === selectedDay);
-  const currentPhase = phaseDailyQuests.find((quest) => quest.day_number === getCurrentChallengeDay(journeyStartDate)) ?? selectedPhase;
+  const currentPhase = phaseDailyQuests.find((quest) => quest.day_number === currentChallengeDay) ?? selectedPhase;
+  const currentPhaseLabel = currentPhase?.phase_category_id.replace("PHASE_", language === "id" ? "Fase " : "Phase ") ?? t("Phase 01");
   const activeChallenges = phaseQuestsForSelectedDay.length > 0
     ? [...phaseQuestsForSelectedDay, ...userQuestsForSelectedDay, ...challenges.filter((challenge) => challenge.custom && (!challenge.dayNumber || challenge.dayNumber === selectedDay))]
     : [...challenges.filter((challenge) => !challenge.custom), ...userQuestsForSelectedDay, ...challenges.filter((challenge) => challenge.custom && (!challenge.dayNumber || challenge.dayNumber === selectedDay))];
@@ -1176,9 +1269,6 @@ export default function DashboardClient({
     }
   });
   const userTotalRecordedStardust = Object.values(phaseCoinsByDay).reduce((total, score) => total + score, 0);
-  const visibleBonusResources = bonusResources[bonusType].filter((resource) =>
-    `${resource.title} ${resource.category} ${resource.description}`.toLowerCase().includes(bonusSearch.trim().toLowerCase()),
-  );
   const visibleUploadedResources = uploadedResources.filter((resource) =>
     resource.type === bonusType
     && `${resource.title} ${resource.description}`.toLowerCase().includes(bonusSearch.trim().toLowerCase()),
@@ -1236,7 +1326,7 @@ export default function DashboardClient({
     issuedAtValue: string,
     assessmentRows: CertificateAssessmentRow[],
     preview = false,
-    certificateName = profileName.trim() || email || "JOolo member",
+    certificateName = profileName.trim() || email || "JOOLO member",
   ) {
       const templateResponse = await fetch("/certificates/joolo-40-day-template-clean.pdf");
       if (!templateResponse.ok) {
@@ -1557,26 +1647,34 @@ export default function DashboardClient({
   }
 
   async function openCertificateConfirmation() {
-    if (!canClaimCertificate || !certificateStatusLoaded || certificateGenerating) return;
+    if (!certificateStatusLoaded || certificateGenerating) return;
     if (certificateClaimed) {
-      if (claimedCertificate) {
-        await downloadClaimedCompletionCertificate(claimedCertificate);
-      } else {
+      if (!claimedCertificate) {
         notify("The original certificate details are unavailable, so it cannot be safely regenerated.", 10000);
+        return;
       }
-      return;
     }
+    setProfileOpen(false);
+    setCertificateConfirmationOpen(true);
     setCertificateGenerating(true);
     try {
-      const assessmentRows = getCertificateAssessmentRows();
-      const previewBytes = await buildCompletionCertificatePdf("PREVIEW", "", assessmentRows, true);
+      const assessmentRows = claimedCertificate?.assessmentRows ?? getCertificateAssessmentRows();
+      const previewBytes = claimedCertificate
+        ? await buildCompletionCertificatePdf(
+          claimedCertificate.verificationCode,
+          claimedCertificate.issuedAt,
+          claimedCertificate.assessmentRows,
+          false,
+          claimedCertificate.fullName,
+        )
+        : await buildCompletionCertificatePdf("PREVIEW", "", assessmentRows, true);
       const previewUrl = URL.createObjectURL(
         new Blob([previewBytes.buffer as ArrayBuffer], { type: "application/pdf" }),
       );
       setCertificatePreviewRows(assessmentRows);
       setCertificatePreviewUrl(previewUrl);
-      setCertificateConfirmationOpen(true);
     } catch (error) {
+      setCertificateConfirmationOpen(false);
       console.error("Unable to prepare completion certificate preview", error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       notify(`Certificate preview could not be prepared: ${errorMessage}`, 10000);
@@ -1612,7 +1710,7 @@ export default function DashboardClient({
     setCertificateGenerating(true);
     try {
       const supabase = createClient();
-      const certificateName = profileName.trim() || email || "JOolo member";
+      const certificateName = profileName.trim() || email || "JOOLO member";
       const { data: certificateData, error: certificateError } = await supabase.rpc("issue_40_day_certificate", {
         p_certificate_name: certificateName,
         p_assessment_snapshot: certificatePreviewRows.map(({ skillCategoryId, assessment }) => ({
@@ -2243,41 +2341,82 @@ export default function DashboardClient({
     setProfileOpen(true);
   }
 
+  function openCurrentPhaseFromProfile() {
+    setProfileOpen(false);
+    setSelectedDay(currentChallengeDay);
+    window.requestAnimationFrame(() => {
+      document.getElementById("calendar")?.scrollIntoView({ behavior: "smooth" });
+    });
+  }
+
+  function openDailyRankFromProfile() {
+    setProfileOpen(false);
+    setLeaderboardPeriod("daily");
+    setLeaderboardOpen(true);
+  }
+
+  function openCoinBalanceFromProfile() {
+    setProfileOpen(false);
+    window.requestAnimationFrame(() => {
+      document.getElementById("total-coin-card")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }
+
   async function resetJourney() {
-    const supabase = createClient();
-    const { error } = await supabase
-      .from("user_phase_quest_progress")
-      .delete()
-      .eq("user_id", userId);
+    if (resetSaving) return;
+    setResetSaving(true);
+    try {
+      const { data, error } = await createClient().rpc("reset_user_challenge_data", {
+        p_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+      });
+      if (error) throw new Error(error.message);
 
-    if (error) {
-      notify(`Your saved phase challenge progress could not be reset: ${error.message}`);
-      return;
+      const result = Array.isArray(data) ? data[0] : data;
+      if (
+        !isRecord(result)
+        || typeof result.start_date !== "string"
+        || !/^\d{4}-\d{2}-\d{2}$/.test(result.start_date)
+        || !Number.isInteger(result.lives)
+        || result.lives !== 7
+        || !Number.isInteger(result.coin_balance)
+        || result.coin_balance !== 0
+      ) {
+        throw new Error("Supabase returned an invalid reset state.");
+      }
+
+      setChallenges(initialChallenges);
+      setPhaseQuestProgressById({});
+      setCompletedPhaseQuestIds([]);
+      setPhaseProgressDrafts({});
+      setUserDailyQuests([]);
+      setPendingUserDailyQuestIds([]);
+      setUserQuestProgressDrafts({});
+      setSelectedDay(1);
+      setDailyStardustByDay({});
+      setChallengeCompletionDays({});
+      setCoins(result.coin_balance);
+      setLives(result.lives);
+      setJourneyStartDate(result.start_date);
+      setJourneyStartDateDraft(result.start_date);
+      setGender("woman");
+      setProfileName(name);
+      setProfileTheme("dark");
+      setProfileDialog(null);
+      [
+        "joolo-gender",
+        "joolo-challenges",
+        "joolo-daily-stardust",
+        "joolo-challenge-completion-days",
+        "joolo-coins",
+        "joolo-profile-name",
+        "joolo-profile-theme",
+      ].forEach((key) => localStorage.removeItem(`${userId}:${key}`));
+      notify("Your journey has been reset. A new 40-day challenge starts today with 7 lives.");
+    } catch (error) {
+      notify(`Your journey could not be reset: ${error instanceof Error ? error.message : "Unexpected error."}`, 10000);
+    } finally {
+      setResetSaving(false);
     }
-
-    const { data: wallet, error: walletError } = await supabase
-      .from("coin_wallets")
-      .select("balance")
-      .eq("user_id", userId)
-      .single();
-
-    if (walletError) {
-      notify(`Challenge progress was reset, but your coin balance could not be refreshed: ${walletError.message}`);
-      return;
-    }
-
-    setChallenges(initialChallenges);
-    setCompletedPhaseQuestIds([]);
-    setSelectedDay(1);
-    setDailyStardustByDay({});
-    setChallengeCompletionDays({});
-    setCoins(wallet.balance);
-    setGender("woman");
-    setProfileName(name);
-    setProfileTheme("dark");
-    setProfileDialog(null);
-    ["joolo-gender", "joolo-challenges", "joolo-daily-stardust", "joolo-challenge-completion-days", "joolo-coins", "joolo-profile-name", "joolo-profile-theme"].forEach((key) => localStorage.removeItem(`${userId}:${key}`));
-    notify("Your journey data has been reset.");
   }
 
   function openJourneyDatePicker() {
@@ -2328,92 +2467,6 @@ export default function DashboardClient({
     router.refresh();
   }
 
-  async function downloadBonus(resource: BonusResource, type: BonusType) {
-    let content: Uint8Array;
-    let mimeType: string;
-    let extension: string;
-
-    if (type === "ebook") {
-      const document = await PDFDocument.create();
-      const font = await document.embedFont(StandardFonts.Helvetica);
-      const boldFont = await document.embedFont(StandardFonts.HelveticaBold);
-      const page = document.addPage([595, 842]);
-      const navy = rgb(0.035, 0.065, 0.12);
-      const cyan = rgb(0.36, 0.95, 0.89);
-      page.drawRectangle({ x: 0, y: 0, width: 595, height: 842, color: navy });
-      page.drawText("JOOLO  /  COSMIC GROWTH", { x: 54, y: 780, size: 11, font: boldFont, color: cyan });
-      page.drawText(resource.category.toUpperCase(), { x: 54, y: 704, size: 10, font: boldFont, color: rgb(0.75, 0.62, 0.91) });
-      page.drawText(resource.title, { x: 54, y: 659, size: 29, font: boldFont, color: rgb(0.94, 0.96, 1), maxWidth: 485 });
-      page.drawText("A small guide for your next chapter", { x: 54, y: 630, size: 12, font, color: rgb(0.65, 0.73, 0.84) });
-      page.drawLine({ start: { x: 54, y: 606 }, end: { x: 541, y: 606 }, thickness: 1, color: rgb(0.21, 0.39, 0.49) });
-
-      const sections = [
-        ["A NOTE BEFORE YOU BEGIN", resource.description],
-        ["START WHERE YOU ARE", "You do not need a perfect plan or a perfect day. Choose one small action that feels possible, and let it be enough for today."],
-        ["MAKE IT EASY TO RETURN", "Connect your new practice to a moment that already exists in your day. Keep the first step short, make your tools easy to reach, and celebrate showing up."],
-        ["YOUR NEXT SMALL STEP", "Write down one promise you want to keep this week. When a day does not go to plan, begin again with kindness. Progress is built by returning, not by being flawless."],
-      ];
-      let y = 563;
-      for (const [heading, paragraph] of sections) {
-        page.drawText(heading, { x: 54, y, size: 11, font: boldFont, color: cyan });
-        y -= 22;
-        const words = paragraph.split(/\s+/);
-        let line = "";
-        for (const word of words) {
-          const candidate = line ? `${line} ${word}` : word;
-          if (font.widthOfTextAtSize(candidate, 12) > 475 && line) {
-            page.drawText(line, { x: 54, y, size: 12, font, color: rgb(0.79, 0.83, 0.89) });
-            y -= 18;
-            line = word;
-          } else {
-            line = candidate;
-          }
-        }
-        if (line) {
-          page.drawText(line, { x: 54, y, size: 12, font, color: rgb(0.79, 0.83, 0.89) });
-          y -= 18;
-        }
-        y -= 28;
-      }
-      page.drawText("Small steps. Brighter orbits.", { x: 54, y: 55, size: 10, font: boldFont, color: cyan });
-      content = await document.save();
-      mimeType = "application/pdf";
-      extension = "pdf";
-    } else {
-      const rows = [
-        ...(resource.rows ?? [["Date", "Goal", "Progress", "Notes"]]),
-        ...Array.from({ length: type === "tracker" && resource.title.includes("40-Day") ? 40 : 28 }, (_, index) => [
-          resource.title.includes("40-Day") ? `Day ${index + 1}` : `Week ${Math.floor(index / 7) + 1} · Day ${(index % 7) + 1}`,
-          "", "", "", "", "",
-        ]),
-      ];
-      const cell = (value: string, column: number, row: number) => `<c r="${String.fromCharCode(65 + column)}${row + 1}" t="inlineStr"><is><t>${escapeXml(value)}</t></is></c>`;
-      const sheetRows = rows.map((row, rowIndex) =>
-        `<row r="${rowIndex + 1}">${row.map((value, columnIndex) => cell(value, columnIndex, rowIndex)).join("")}</row>`,
-      ).join("");
-      const workbookFiles = {
-        "[Content_Types].xml": strToU8('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>'),
-        "_rels/.rels": strToU8('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'),
-        "xl/workbook.xml": strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${escapeXml(resource.title.slice(0, 31))}" sheetId="1" r:id="rId1"/></sheets></workbook>`),
-        "xl/_rels/workbook.xml.rels": strToU8('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>'),
-        "xl/worksheets/sheet1.xml": strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sheetRows}</sheetData></worksheet>`),
-      };
-      content = zipSync(workbookFiles);
-      mimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-      extension = "xlsx";
-    }
-
-    const url = URL.createObjectURL(new Blob([content.buffer as ArrayBuffer], { type: mimeType }));
-    const link = window.document.createElement("a");
-    link.href = url;
-    link.download = `${resource.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}.${extension}`;
-    window.document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    notify(`${resource.title} is ready to download.`);
-  }
-
   if (!hydrated) {
     return (
       <main className="cosmos login-screen">
@@ -2429,7 +2482,7 @@ export default function DashboardClient({
       <div className="stars stars-one" /><div className="stars stars-two" />
       <div className="nebula nebula-left" /><div className="nebula nebula-right" />
       <header className="topbar shell">
-        <a href="#top" className="brand" aria-label={t("JOolo home")}><span className="brand-mark">✦</span><span>JO<span className="brand-muted">O</span>LO<span className="brand-dot">.</span></span></a>
+        <a href="#top" className="brand" aria-label={t("JOOLO home")}><span className="brand-mark">✦</span><span>JO<span className="brand-muted">O</span>LO<span className="brand-dot">.</span></span></a>
         <nav className="main-nav" aria-label={t("Main navigation")}>
           <button className="nav-link" onClick={() => setLeaderboardOpen(true)}>{t("Leaderboard")}</button>
           <a className={`nav-link ${bonusOpen ? "" : "active"}`} href="#calendar" onClick={() => setBonusOpen(false)}>{t("Challenge")}</a>
@@ -2459,10 +2512,10 @@ export default function DashboardClient({
               </div>
               <div className="overview-card phase-card">
                 <div className="phase-emblem"><Icon name="sparkles" size={35} /></div>
-                <div><span className="card-kicker">{t("YOUR CURRENT PHASE")}</span><strong>{currentPhase?.phase_category_id.replace("PHASE_", language === "id" ? "Fase " : "Phase ") ?? t("Phase 01")} <span>·</span> {t(currentPhase?.phase_name ?? "Awakening")}</strong><small>{currentPhase?.focus ?? t("Every journey begins with a spark.")}</small></div>
+                <div><span className="card-kicker">{t("YOUR CURRENT PHASE")}</span><strong>{currentPhaseLabel} <span>·</span> {t(currentPhase?.phase_name ?? "Awakening")}</strong><small>{currentPhase?.focus ?? t("Every journey begins with a spark.")}</small></div>
                 <span className="phase-index">{currentPhase?.phase_category_id.replace("PHASE_", "") ?? "01"}</span>
               </div>
-              <div className="overview-card stat-card">
+              <div className="overview-card stat-card" id="total-coin-card">
                 <span className="stat-icon coin-icon">✦</span><strong>{coins}</strong><span className="stat-label">{t("TOTAL COIN")}</span>
               </div>
               <div className="overview-card lives-card">
@@ -2489,9 +2542,9 @@ export default function DashboardClient({
           <div className="calendar-grid" role="group" aria-label={t("Select a challenge day")}>
             {Array.from({ length: 40 }, (_, index) => {
               const day = index + 1;
-              const isCurrent = day === selectedDay;
-              const isPast = day < selectedDay;
-              return <button key={day} className={`day-cell ${isCurrent ? "current" : ""} ${isPast ? "past" : ""}`} onClick={() => setSelectedDay(day)} aria-label={`${t("Day ")}${day}${isCurrent ? t(", selected") : ""}`} aria-pressed={isCurrent}>
+              const isCurrent = day === currentChallengeDay;
+              const isPast = day < currentChallengeDay;
+              return <button key={day} className={`day-cell ${isCurrent ? "current" : ""} ${isPast ? "past" : ""}`} onClick={() => setSelectedDay(day)} aria-label={`${t("Day ")}${day}${isCurrent ? t(", today") : ""}`} aria-pressed={day === selectedDay}>
                 <span>{String(day).padStart(2, "0")}</span><i className={isPast ? "complete-dot" : ""} />
               </button>;
             })}
@@ -2528,7 +2581,9 @@ export default function DashboardClient({
                 : userQuest?.is_completed
                   ? userQuest.earned_coin
                   : challenge.reward;
-              return <article className={`challenge-card ${challenge.accent} ${challenge.done ? "is-done" : ""} ${challenge.custom ? "custom-card" : ""} ${challenge.phaseFocus ? "phase-quest-card" : ""}`} key={challenge.id} style={coverImage ? { backgroundImage: `linear-gradient(90deg, rgba(8, 17, 31, .98) 0%, rgba(8, 17, 31, .91) 38%, rgba(8, 17, 31, .31) 100%), url("${coverImage}")` } : undefined}>
+              return <article className={`challenge-card ${challenge.accent} ${challenge.done ? "is-done" : ""} ${challenge.custom ? "custom-card" : ""} ${challenge.phaseFocus ? "phase-quest-card" : ""}`} key={challenge.id} style={coverImage ? { backgroundImage: profileTheme === "light"
+                ? `linear-gradient(90deg, rgba(244, 249, 253, .97) 0%, rgba(244, 249, 253, .9) 48%, rgba(244, 249, 253, .66) 100%), url("${coverImage}")`
+                : `linear-gradient(90deg, rgba(8, 17, 31, .98) 0%, rgba(8, 17, 31, .91) 38%, rgba(8, 17, 31, .31) 100%), url("${coverImage}")` } : undefined}>
                 {userQuest && <button className="user-quest-edit" type="button" onClick={() => openProgressEditor(challenge)} disabled={pendingUserDailyQuestIds.includes(userQuest.id)}><Icon name="sparkles" size={15} /> {t("Edit challenge")}</button>}
                 <div className="card-corner" />
                 <div className="reward-tag"><span>✦</span> {displayedReward} <small>{t(challenge.phaseFocus ? "COIN" : "XP")}</small></div>
@@ -2589,12 +2644,12 @@ export default function DashboardClient({
           {dayNumber === 40 && <div className={`day-40-actions ${canClaimCertificate ? "unlocked" : "locked"}`} aria-label={t("40-day challenge completion")}>
             {!canClaimCertificate && <p className="day-40-lock-note">{t("Complete at least one challenge on each of the 40 days to unlock these actions.")}</p>}
             <button className={`day-40-action-button certificate-action ${certificateClaimed ? "claimed" : ""}`} type="button" disabled={!canClaimCertificate || !certificateStatusLoaded || certificateGenerating || (certificateClaimed && !claimedCertificate)} title={t(canClaimCertificate ? "Claim your completion certificate" : "Complete all challenges to unlock")} onClick={() => { void openCertificateConfirmation(); }}>
-              <Icon name="certificate" size={19} /> {t(certificateGenerating ? "Generating certificate..." : certificateClaimed ? claimedCertificate ? "Download certificate again" : "Certificate already claimed" : "Claim Certificate")} <Icon name="arrow" size={17} />
+              <Icon name="certificate" size={19} /> {t(certificateGenerating ? "Generating certificate..." : certificateClaimed ? claimedCertificate ? "View certificate" : "Certificate already claimed" : "Claim Certificate")} <Icon name="arrow" size={17} />
             </button>
           </div>}
         </section>
 
-        <footer className="footer"><a href="#top" className="footer-brand">✦ JOolo<span>.</span></a><span>{t("Made for your becoming")} <i>✧</i> 2026</span><a href="#top">{t("Back to the stars ↑")}</a></footer>
+        <footer className="footer"><a href="#top" className="footer-brand">✦ JOOLO<span>.</span></a><span>{t("Made for your becoming")} <i>✧</i> 2026</span><a href="#top">{t("Back to the stars ↑")}</a></footer>
       </div>
 
       {modalOpen && <div className="create-task-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeTaskCreator(); }}>
@@ -2731,6 +2786,114 @@ export default function DashboardClient({
         </section>
       </div>}
 
+      {appGuideOpen && <div className={`profile-screen app-guide-screen ${profileTheme === "light" ? "profile-light" : ""}`}>
+        <div className="stars stars-one" /><div className="stars stars-two" />
+        <main className="profile-content shell app-guide-content" aria-labelledby="app-guide-title">
+          <header className="profile-heading">
+            <button className="profile-back" type="button" onClick={() => { setAppGuideOpen(false); setProfileOpen(true); }} aria-label={t("Back to profile")}><Icon name="back" size={23} /></button>
+            <h1 id="app-guide-title">{t("Your JOOLO Guide")}</h1>
+            <span className="profile-heading-spacer" />
+          </header>
+          <section className="profile-panel app-guide-intro">
+            <span className="profile-section-label">{t("APP GUIDE")}</span>
+            <p>{t("A clearer map for your 40-day journey.")}</p>
+          </section>
+          <section className="profile-panel app-guide-card">
+            <h2>{t("Why 40 Days and Six Phases?")}</h2>
+            <p>{t("JOOLO uses 40 days as an ideal period for an identity shift and for building new neural pathways in the brain. To make this transformation feel manageable and easier to carry out, the 40-day journey is divided into six consecutive phases:")}</p>
+            <div className="app-guide-phase-list">
+              {[
+                {
+                  title: "Phase 1: Awakening (Days 1 - 4)",
+                  description: "Change cannot begin without awareness. In this initial phase, you are invited to pause, map your real situation (where you are now), and find your “Why” (the deep reason) this challenge matters. Without this awareness, efforts to change in the following days can feel like walking without a compass.",
+                },
+                {
+                  title: "Phase 2: Reprogramming (Days 5 - 7)",
+                  description: "Once you are aware of what needs to change, the brain begins responding by forming new thought and action patterns (reprogramming). In this phase, the biggest obstacles are distractions from your environment and old habits. The main focus is to break the chain of bad habits and begin planting new, consistent micro-routines.",
+                },
+                {
+                  title: "Phase 3: Focus & Discipline (Days 8 - 14)",
+                  description: "As you enter the second week, initial motivation may begin to fade and laziness may appear. This is where discipline takes over from motivation. This phase is designed to train your focus and overcome procrastination, helping you stay productive even when you do not feel “motivated.”",
+                },
+                {
+                  title: "Phase 4: Emotional Mastery (Days 15 - 21)",
+                  description: "The biggest challenge to consistency is not physical, but emotional (such as stress, anxiety, boredom, or frustration that can trigger emotional eating or relapse). This midpoint phase is crucial for learning to manage emotions so you are not controlled by momentary impulses, strengthening your mental resilience.",
+                },
+                {
+                  title: "Phase 5: Growth Expansion (Days 22 - 28)",
+                  description: "When the foundations of habits, discipline, and emotions begin to stabilize, it is time to expand your capacity (expansion). In this phase, you are encouraged to step outside your comfort zone, raise your standards of living, make bolder decisions, and align your actions with a bigger vision for the future.",
+                },
+                {
+                  title: "Phase 6: Final Transformation (Days 29 - 40)",
+                  description: "This final phase is a time to harvest results while locking in your new identity. Transformation does not stop on day 40; therefore, this phase focuses on reviewing the journey, celebrating progress, and designing a maintenance plan so the change can last and become a new lifestyle.",
+                },
+              ].map((phase) => (
+                <article className="app-guide-phase" key={phase.title}>
+                  <h3>{t(phase.title)}</h3>
+                  <p>{t(phase.description)}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+          <section className="profile-panel app-guide-card">
+            <h2>{t("What is a Phase?")}</h2>
+            <p>{t("Your 40-day journey is organized into six progressive Phases. Each Phase groups daily challenges around a theme, so you can build habits step by step instead of trying to change everything at once. Select a day on the challenge map to see that day’s Phase and activities.")}</p>
+          </section>
+          <section className="profile-panel app-guide-card">
+            <h2>{t("How do Phases build soft skills?")}</h2>
+            <p>{t("Soft skills are abilities such as self-awareness, focus, discipline, and resilience. Each Phase emphasizes a related skill area, and its daily activities give you practical ways to practice those abilities. Completing activities consistently helps you reflect on and strengthen those skills over time; the activities are practice, not a formal psychological assessment.")}</p>
+            <h3>{t("The six skill areas")}</h3>
+            <div className="app-guide-skill-grid">
+              {[
+                "Self-Awareness, Emotional Regulation & Personal Accountability",
+                "Systems Thinking, Discipline & Operational Efficiency",
+                "Focus Mastery, Task Initiation & Time Management",
+                "Resilience, Cognitive Flexibility & Emotional Boundaries",
+                "Growth Mindset, Risk Appetite & Decision-Making",
+                "Strategic Planning, Sustainability & Self-Governance",
+              ].map((skill, index) => (
+                <article className="app-guide-skill" key={skill}>
+                  <span>{language === "id" ? `FASE 0${index + 1}` : `PHASE 0${index + 1}`}</span>
+                  <strong>{t(skill)}</strong>
+                </article>
+              ))}
+            </div>
+          </section>
+          <section className="profile-panel app-guide-card">
+            <h2>{t("How are coins calculated?")}</h2>
+            <p>{t("Coins are awarded when you mark a challenge complete. Phase challenges have a base reward shown on the card: Easy = 10, Medium = 20, and Hard = 30 coins. If the challenge has a measurable target and you record reaching that target, you earn 10 bonus coins.")}</p>
+            <div className="app-guide-rewards">
+              {(["Easy", "Medium", "Hard"] as const).map((level, index) => (
+                <div className="app-guide-reward" key={level}>
+                  <span>{t(level)}</span>
+                  <strong>{(index + 1) * 10} {t("coin")}</strong>
+                </div>
+              ))}
+            </div>
+            <p>{t("Custom challenges use the same difficulty rewards and can also earn the 10-coin target bonus. An incomplete challenge earns no coins. Your total balance adds up coins earned from completed Phase and custom challenges; it can also change when coins are spent to restore a life.")}</p>
+            <p className="app-guide-example">{t("Example: completing a Medium challenge earns 20 coins; completing its full recorded target earns 30 coins in total.")}</p>
+          </section>
+          <section className="profile-panel app-guide-card">
+            <h2>{t("How do Total Lives work?")}</h2>
+            <p>{t("You start each 40-day challenge with 7 lives. At least one Phase or custom challenge scheduled for a day must be completed that day to keep your lives. If none is completed by the end of that day, you lose 1 life. The app checks closed challenge days using your local time zone.")}</p>
+            <h3>{t("What happens when lives reach zero?")}</h3>
+            <div className="app-guide-life-rule">
+              <span className="app-guide-life-count" aria-hidden="true">♥ ♥ ♥ ♥ ♥ ♥ ♥</span>
+              <p>{t("When a missed day uses your last life, the app automatically spends 250 coins to restore 1 life if your balance has at least 250 coins. Your challenge continues with the remaining balance reduced by 250 coins.")}</p>
+            </div>
+            <p className="app-guide-warning">{t("If your balance is below 250 coins when lives run out, an automatic reset starts a new 40-day challenge that day with 7 lives. It clears saved Phase progress and custom challenges, and resets your coin balance to zero. This cannot be undone.")}</p>
+          </section>
+          <section className="profile-panel app-guide-card">
+            <h2>{t("How do I claim my certificate?")}</h2>
+            <ol className="app-guide-certificate-steps">
+              <li>{t("Reach Day 40 and complete at least one Phase challenge on every one of the 40 days. Custom challenges alone do not count toward this certificate requirement.")}</li>
+              <li>{t("Open the certificate action on Day 40 to preview your certificate. Before claiming, review the name and six soft-skill scores; you can update your profile name if needed. The preview is not yet an issued certificate.")}</li>
+              <li>{t("Confirm and download to issue your certificate. It can only be claimed once. Afterward, you can preview the issued certificate and download it again, but you cannot issue another certificate for the same account.")}</li>
+            </ol>
+          </section>
+        </main>
+      </div>}
+
       {profileOpen && <div className={`profile-screen ${profileTheme === "light" ? "profile-light" : ""}`}>
         <div className="stars stars-one" /><div className="stars stars-two" />
         <section className="profile-content shell" aria-labelledby="profile-title">
@@ -2743,9 +2906,18 @@ export default function DashboardClient({
             <div className="profile-avatar-frame"><img src={avatarUrl || (gender === "woman" ? "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=360&h=360&q=85" : "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=360&h=360&q=85")} alt={t("Profile avatar")} /></div>
             <div className="profile-identity-copy"><span className="profile-kicker">{t("YOUR COSMIC JOURNEY")}</span><h2>{profileName}</h2><span className="profile-handle">{email}</span><button className="profile-edit-button" onClick={() => setProfileDialog("edit")}>{t("Edit profile")} <Icon name="chevron" size={14} /></button></div>
             <div className="profile-stats">
-              <div><Icon name="sparkles" size={18} /><span>{t("PHASE 1")}</span></div>
-              <div><Icon name="trophy" size={18} /><span>{completed} <small>{t("challenges")}</small></span></div>
-              <div><span className="profile-coin">✦</span><span>{coins} <small>{t("coin")}</small></span></div>
+              <button type="button" onClick={openCurrentPhaseFromProfile} aria-label={`${t("Your current phase")}: ${currentPhaseLabel}, ${t(currentPhase?.phase_name ?? "Awakening")}`}>
+                <Icon name="sparkles" size={18} />
+                <span>{currentPhaseLabel}<small>{t(currentPhase?.phase_name ?? "Awakening")}</small></span>
+              </button>
+              <button type="button" onClick={openDailyRankFromProfile} aria-label={`${t("Your rank")}: ${dailyLeaderboardRank ? `#${dailyLeaderboardRank}` : "—"}`}>
+                <Icon name="trophy" size={18} />
+                <span>{dailyLeaderboardRank ? `#${dailyLeaderboardRank}` : "—"}<small>{t("YOUR RANK")}</small></span>
+              </button>
+              <button type="button" onClick={openCoinBalanceFromProfile} aria-label={`${t("TOTAL COIN")}: ${coins}`}>
+                <span className="profile-coin">✦</span>
+                <span>{coins} <small>{t("coin")}</small></span>
+              </button>
             </div>
           </section>
           <section className="profile-panel profile-preferences">
@@ -2754,7 +2926,7 @@ export default function DashboardClient({
           </section>
           <section className="profile-panel">
             <span className="profile-section-label">{t("ACHIEVEMENTS")}</span>
-            <button className="profile-action-row certificate-row" disabled={!canClaimCertificate || !certificateStatusLoaded || certificateGenerating || (certificateClaimed && !claimedCertificate)} onClick={() => { void openCertificateConfirmation(); }}><span className="profile-row-icon"><Icon name="certificate" size={25} /></span><strong>{t(certificateGenerating ? "Generating certificate..." : certificateClaimed ? claimedCertificate ? "Download certificate again" : "Certificate already claimed" : "Claim Certificate")}</strong><span className="certificate-progress">{t(certificateClaimed ? "CLAIMED" : canClaimCertificate ? "COMPLETE 40 DAYS" : "AVAILABLE ON DAY 40")}</span><Icon name="chevron" size={21} /></button>
+            <button className="profile-action-row certificate-row" disabled={!certificateStatusLoaded || certificateGenerating || (certificateClaimed && !claimedCertificate)} onClick={() => { void openCertificateConfirmation(); }}><span className="profile-row-icon"><Icon name="certificate" size={25} /></span><strong>{t(certificateGenerating ? "Generating certificate..." : certificateClaimed ? "View certificate" : "Preview certificate")}</strong><span className="certificate-progress">{t(certificateClaimed ? "CLAIMED" : canClaimCertificate ? "COMPLETE 40 DAYS" : "AVAILABLE ON DAY 40")}</span><Icon name="chevron" size={21} /></button>
           </section>
           <section className="profile-panel profile-data-panel">
             <span className="profile-section-label">{t("DATA")}</span>
@@ -2762,48 +2934,48 @@ export default function DashboardClient({
           </section>
           <section className="profile-panel">
             <span className="profile-section-label">{t("APP GUIDE")}</span>
-            <button className={`profile-action-row guide-row ${expandedGuide === "how" ? "expanded" : ""}`} onClick={() => setExpandedGuide((value) => value === "how" ? null : "how")}><span className="profile-row-icon"><Icon name="book" size={24} /></span><strong>{t("How to Use")}</strong><Icon name="chevron" size={21} /></button>
-            {expandedGuide === "how" && <p className="profile-guide-copy">{t("Choose a day on your 40-day map, complete a small daily challenge, and collect coins as you build consistency. Your progress is saved on this device.")}</p>}
-            <button className={`profile-action-row guide-row ${expandedGuide === "points" ? "expanded" : ""}`} onClick={() => setExpandedGuide((value) => value === "points" ? null : "points")}><span className="profile-row-icon"><Icon name="star" size={24} /></span><strong>{t("Points Explained")}</strong><Icon name="chevron" size={21} /></button>
-            {expandedGuide === "points" && <p className="profile-guide-copy">{t("Each completed challenge earns the coins shown on its card. Your balance appears here and on your journey dashboard.")}</p>}
+            <button className="profile-action-row guide-row" type="button" onClick={() => { setProfileOpen(false); setAppGuideOpen(true); }}><span className="profile-row-icon"><Icon name="book" size={24} /></span><strong>{t("Your JOOLO Guide")}</strong><Icon name="chevron" size={21} /></button>
           </section>
           <section className="profile-panel">
             <span className="profile-section-label">{t("SUPPORT")}</span>
-            <a className="profile-action-row guide-row" href="mailto:hello@joolo.app?subject=JOolo%20support"><span className="profile-row-icon"><Icon name="support" size={24} /></span><strong>{t("Customer Service")}</strong><Icon name="chevron" size={21} /></a>
-            <button className="profile-action-row guide-row" onClick={() => setProfileDialog("feedback")}><span className="profile-row-icon"><Icon name="message" size={24} /></span><strong>{t("Feedback")}</strong><Icon name="chevron" size={21} /></button>
+            <a className="profile-action-row guide-row" href="mailto:hello@joolo.app?subject=JOOLO%20support"><span className="profile-row-icon"><Icon name="support" size={24} /></span><strong>{t("Customer Service")}</strong><Icon name="chevron" size={21} /></a>
           </section>
           <button className="profile-logout" onClick={() => setProfileDialog("logout")}><Icon name="logout" size={17} /> {t("Log Out")}</button>
           <footer className="profile-version">JOOLO <span>v1.0.0</span><i>✦</i></footer>
         </section>
-        {profileDialog && <div className="modal-backdrop profile-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setProfileDialog(null); }}>
+        {profileDialog && <div className="modal-backdrop profile-dialog-backdrop" role="presentation" onMouseDown={(event) => { if (!resetSaving && event.target === event.currentTarget) setProfileDialog(null); }}>
           <section className="modal glass-panel profile-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-dialog-title">
-            <button className="modal-close" onClick={() => setProfileDialog(null)} aria-label={t("Close")}><Icon name="close" size={19} /></button>
+            <button className="modal-close" onClick={() => setProfileDialog(null)} aria-label={t("Close")} disabled={resetSaving}><Icon name="close" size={19} /></button>
             <div className="modal-icon"><Icon name={profileDialog === "reset" ? "trash" : profileDialog === "certificate" ? "certificate" : profileDialog === "logout" ? "logout" : profileDialog === "feedback" ? "message" : "sparkles"} size={25} /></div>
             {profileDialog === "edit" && <><span className="eyebrow">{t("MAKE IT YOURS")}</span><h2 id="profile-dialog-title">{t("Edit your profile.")}</h2><p>{t("Choose the name you want to see on your journey.")}</p><form onSubmit={(event) => { event.preventDefault(); const value = String(new FormData(event.currentTarget).get("name") ?? "").trim(); if (value) setProfileName(value); setProfileDialog(null); notify("Profile updated."); }}><label htmlFor="profile-name">{t("Display name")}</label><input id="profile-name" name="name" defaultValue={profileName} maxLength={32} required /><button className="primary-button submit-button" type="submit">{t("Save profile")} <Icon name="check" size={16} /></button></form></>}
-            {profileDialog === "reset" && <><span className="eyebrow">{t("A FRESH ORBIT")}</span><h2 id="profile-dialog-title">{t("Reset your journey?")}</h2><p>{t("This clears your saved challenges, coins, and preferences on this device. This can’t be undone.")}</p><div className="profile-dialog-actions"><button className="outline-button" onClick={() => setProfileDialog(null)}>{t("Keep my progress")}</button><button className="profile-danger-button" onClick={resetJourney}>{t("Reset everything")}</button></div></>}
+            {profileDialog === "reset" && <><span className="eyebrow">{t("A FRESH ORBIT")}</span><h2 id="profile-dialog-title">{t("Reset your journey?")}</h2><p>{t("This clears your saved challenge progress, custom challenges, coins, and preferences, then starts a new 40-day challenge with 7 lives. This can’t be undone.")}</p><div className="profile-dialog-actions"><button className="outline-button" type="button" onClick={() => setProfileDialog(null)} disabled={resetSaving}>{t("Keep my progress")}</button><button className="profile-danger-button" type="button" onClick={() => { void resetJourney(); }} disabled={resetSaving}>{t(resetSaving ? "Resetting..." : "Reset everything")}</button></div></>}
             {profileDialog === "certificate" && <><span className="eyebrow">{t("YOUR NEXT MILESTONE")}</span><h2 id="profile-dialog-title">{t("Your 40-day orbit awaits.")}</h2><p>{t("Reach Day 40 and complete all your daily challenges to unlock your certificate.")}</p><button className="primary-button submit-button" onClick={() => { setProfileDialog(null); setProfileOpen(false); setSelectedDay(40); document.getElementById("calendar")?.scrollIntoView({ behavior: "smooth" }); }}>{t("Go to day 40")} <Icon name="arrow" size={16} /></button></>}
-            {profileDialog === "feedback" && <><span className="eyebrow">{t("HELP US GROW")}</span><h2 id="profile-dialog-title">{t("Send a little feedback.")}</h2><p>{t("What could make your next orbit even better?")}</p><form onSubmit={(event) => { event.preventDefault(); setProfileDialog(null); notify("Thanks for helping JOolo grow!"); }}><label htmlFor="feedback-message">{t("Your feedback")}</label><textarea id="feedback-message" name="feedback" rows={4} maxLength={500} placeholder={t("Share an idea or tell us how it’s going...")} required /><button className="primary-button submit-button" type="submit">{t("Send feedback")} <Icon name="arrow" size={16} /></button></form></>}
+            {profileDialog === "feedback" && <><span className="eyebrow">{t("HELP US GROW")}</span><h2 id="profile-dialog-title">{t("Send a little feedback.")}</h2><p>{t("What could make your next orbit even better?")}</p><form onSubmit={(event) => { event.preventDefault(); setProfileDialog(null); notify("Thanks for helping JOOLO grow!"); }}><label htmlFor="feedback-message">{t("Your feedback")}</label><textarea id="feedback-message" name="feedback" rows={4} maxLength={500} placeholder={t("Share an idea or tell us how it’s going...")} required /><button className="primary-button submit-button" type="submit">{t("Send feedback")} <Icon name="arrow" size={16} /></button></form></>}
             {profileDialog === "logout" && <><span className="eyebrow">{t("YOUR ACCOUNT")}</span><h2 id="profile-dialog-title">{t("Ready to head out?")}</h2><p>{t("You’ll be securely signed out. Your journey progress will stay saved on this device.")}</p><button className="primary-button submit-button" onClick={logOut}>{t("Log out")} <Icon name="logout" size={16} /></button></>}
           </section>
         </div>}
       </div>}
 
       {certificateConfirmationOpen && <div className="modal-backdrop certificate-confirmation-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeCertificateConfirmation(); }}>
-        <section className="modal glass-panel certificate-confirmation-dialog" role="alertdialog" aria-modal="true" aria-labelledby="certificate-confirmation-title" aria-describedby="certificate-confirmation-message">
+        <section className="modal glass-panel certificate-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="certificate-confirmation-title" aria-describedby="certificate-confirmation-message">
           <button className="modal-close" type="button" onClick={closeCertificateConfirmation} disabled={certificateGenerating} aria-label={t("Close")}><Icon name="close" size={19} /></button>
           <div className="certificate-confirmation-copy">
             <div className="modal-icon"><Icon name="certificate" size={25} /></div>
-            <span className="eyebrow">{t("Claim certificate")}</span>
-            <h2 id="certificate-confirmation-title">{t("Review your certificate")}</h2>
-            <p id="certificate-confirmation-message">{t("This certificate can only be claimed once. Before you confirm, check that your full name and all scores are correct.")}</p>
+            <span className="eyebrow">{t(certificateClaimed ? "Certificate already claimed" : "Claim certificate")}</span>
+            <h2 id="certificate-confirmation-title">{t(certificateClaimed ? "Preview your certificate" : "Review your certificate")}</h2>
+            <p id="certificate-confirmation-message">{t(certificateClaimed
+              ? "This is your issued certificate. You can download it again below."
+              : canClaimCertificate
+                ? "This certificate can only be claimed once. Before you confirm, check that your full name and all scores are correct."
+                : "Complete all 40 days to unlock certificate claiming and download.")}</p>
             <div className="certificate-review-name">
               <span>{t("Full name on certificate")}</span>
-              <strong>{profileName.trim() || email || "JOolo member"}</strong>
-              <button type="button" onClick={() => {
+              <strong>{(claimedCertificate?.fullName ?? profileName.trim()) || email || "JOOLO member"}</strong>
+              {!certificateClaimed && <button type="button" onClick={() => {
                 closeCertificateConfirmation();
                 setProfileOpen(true);
                 setProfileDialog("edit");
-              }} disabled={certificateGenerating}>{t("Edit full name")}</button>
+              }} disabled={certificateGenerating}>{t("Edit full name")}</button>}
             </div>
             <div className="certificate-review-scores">
               <h3>{t("Your soft-skill scores")}</h3>
@@ -2823,16 +2995,26 @@ export default function DashboardClient({
                 </table>
               </div>
             </div>
-            <p className="certificate-preview-note">{t("The preview shows the name and scores that will be issued. The final download will include its official issue date and certificate ID.")}</p>
+            <p className="certificate-preview-note">{t(certificateClaimed
+              ? "This is your issued certificate. You can download it again below."
+              : canClaimCertificate
+                ? "The preview shows the name and scores that will be issued. The final download will include its official issue date and certificate ID."
+                : "Complete all 40 days to unlock certificate claiming and download.")}</p>
             <div className="certificate-confirmation-actions">
-              <button className="outline-button" type="button" onClick={closeCertificateConfirmation} disabled={certificateGenerating}>{t("Cancel claim")}</button>
-              <button className="primary-button" type="button" onClick={() => { void claimCompletionCertificate(); }} disabled={certificateGenerating || !certificatePreviewUrl || certificatePreviewRows.length !== certificateSkillOrder.length}>
-                {certificateGenerating ? t("Generating certificate...") : t("Confirm and download certificate")} <Icon name="certificate" size={16} />
-              </button>
+              <button className="outline-button" type="button" onClick={closeCertificateConfirmation} disabled={certificateGenerating}>{t(certificateClaimed || !canClaimCertificate ? "Close preview" : "Cancel claim")}</button>
+              {certificateClaimed
+                ? <button className="primary-button" type="button" onClick={() => {
+                  if (!claimedCertificate) return;
+                  closeCertificateConfirmation();
+                  void downloadClaimedCompletionCertificate(claimedCertificate);
+                }} disabled={certificateGenerating || !certificatePreviewUrl}>{t(certificateGenerating ? "Generating certificate..." : "Download certificate")} <Icon name="certificate" size={16} /></button>
+                : canClaimCertificate && <button className="primary-button" type="button" onClick={() => { void claimCompletionCertificate(); }} disabled={certificateGenerating || !certificatePreviewUrl || certificatePreviewRows.length !== certificateSkillOrder.length}>
+                  {certificateGenerating ? t("Generating certificate...") : t("Confirm and download certificate")} <Icon name="certificate" size={16} />
+                </button>}
             </div>
           </div>
           <div className="certificate-preview-pane">
-            <div className="certificate-preview-badge">{t("PREVIEW ONLY · NOT ISSUED")}</div>
+            <div className="certificate-preview-badge">{t(certificateClaimed ? "ISSUED CERTIFICATE · PREVIEW" : "PREVIEW ONLY · NOT ISSUED")}</div>
             {certificatePreviewUrl
               ? <iframe title={t("Certificate preview")} src={certificatePreviewUrl} />
               : <div className="certificate-preview-loading" role="status">{t("Preparing certificate preview...")}</div>}
@@ -2862,7 +3044,7 @@ export default function DashboardClient({
       {bonusOpen && <div className="bonus-screen">
         <div className="stars stars-one" /><div className="stars stars-two" />
         <header className="topbar shell bonus-topbar">
-          <a href="#top" className="brand" onClick={(event) => { event.preventDefault(); setBonusOpen(false); }} aria-label={t("JOolo home")}><span className="brand-mark">✦</span><span>JO<span className="brand-muted">O</span>LO<span className="brand-dot">.</span></span></a>
+          <a href="#top" className="brand" onClick={(event) => { event.preventDefault(); setBonusOpen(false); }} aria-label={t("JOOLO home")}><span className="brand-mark">✦</span><span>JO<span className="brand-muted">O</span>LO<span className="brand-dot">.</span></span></a>
           <nav className="main-nav" aria-label={t("Main navigation")}>
             <button className="nav-link" onClick={() => { setBonusOpen(false); setLeaderboardOpen(true); }}>{t("Leaderboard")}</button>
             <button className="nav-link" onClick={() => { setBonusOpen(false); jumpToChallenges(); }}>{t("Challenge")}</button>
@@ -2884,11 +3066,10 @@ export default function DashboardClient({
             <button className={bonusType === "tracker" ? "selected" : ""} role="tab" aria-selected={bonusType === "tracker"} onClick={() => setBonusType("tracker")}>{t("TRACKER")}</button>
           </div>
           <section className="bonus-resource-list" aria-label={t(bonusType === "ebook" ? "E-book downloads" : "Tracker downloads")}>
-            {visibleUploadedResources.map((resource) => <article className="bonus-resource-card" key={resource.id}>
-              <div className={`bonus-cover ${bonusType}`} style={{ backgroundImage: `linear-gradient(180deg,rgba(5,13,22,.02),rgba(6,13,23,.34)),url("${resource.image_url}")` }}>
+            {visibleUploadedResources.map((resource) => <article className={`bonus-resource-card ${bonusType === "ebook" ? "ebook-resource-card" : ""}`} key={resource.id}>
+              <div className={`bonus-cover ${bonusType}`}>
+                <BonusCoverImage key={resource.image_url} imageUrl={resource.image_url} />
                 <span className="bonus-cover-brand">✦ JOOLO</span>
-                <span className="bonus-cover-title">{resource.title}</span>
-                <span className="bonus-file-badge">{bonusType === "ebook" ? "PDF" : "XLSX"}</span>
               </div>
               <div className="bonus-resource-info">
                 <span className="bonus-category">{t(bonusType === "ebook" ? "E-BOOK" : "TRACKER")}</span>
@@ -2900,15 +3081,7 @@ export default function DashboardClient({
                 </a>
               </div>
             </article>)}
-            {visibleBonusResources.map((resource) => <article className="bonus-resource-card" key={resource.title}>
-              <div className={`bonus-cover ${bonusType}`} style={{ backgroundImage: `linear-gradient(180deg,rgba(5,13,22,.02),rgba(6,13,23,.34)),url("https://images.unsplash.com/${resource.image}?auto=format&fit=crop&w=650&h=460&q=82")` }}>
-                <span className="bonus-cover-brand">✦ JOOLO</span>
-                <span className="bonus-cover-title">{resource.title}</span>
-                {bonusType === "tracker" && <span className="bonus-file-badge">XLSX</span>}
-              </div>
-              <div className="bonus-resource-info"><span className="bonus-category">{t(resource.category)}</span><h2>{t(resource.title)}</h2><p>{t(resource.description)}</p><span className="bonus-resource-meta">{t(resource.detail)}</span><button className="bonus-download-button" onClick={() => { void downloadBonus(resource, bonusType).catch((error: unknown) => { console.error("Unable to create bonus download", error); notify("Download couldn’t be created. Please try again."); }); }}>{t("DOWNLOAD ")}{bonusType === "ebook" ? "PDF" : "XLSX"} <Icon name="arrow" size={16} /></button></div>
-            </article>)}
-            {visibleBonusResources.length + visibleUploadedResources.length === 0 && <div className="bonus-empty"><Icon name="search" size={23} /><strong>{t("No resources found in this orbit.")}</strong><span>{t("Try a different title or category.")}</span><button onClick={() => setBonusSearch("")}>{t("Clear search")}</button></div>}
+            {visibleUploadedResources.length === 0 && <div className="bonus-empty"><Icon name="search" size={23} /><strong>{t("No resources found in this orbit.")}</strong><span>{t("Try a different title or category.")}</span><button onClick={() => setBonusSearch("")}>{t("Clear search")}</button></div>}
           </section>
           <footer className="bonus-footer"><span>✦ {t("Made for your becoming")}</span><button onClick={() => setBonusOpen(false)}>{t("Back to your journey ↑")}</button></footer>
         </main>
@@ -2917,7 +3090,7 @@ export default function DashboardClient({
       {leaderboardOpen && <div className="leaderboard-screen">
         <div className="stars stars-one" /><div className="stars stars-two" />
         <header className="topbar shell leaderboard-topbar">
-          <a href="#top" className="brand" onClick={(event) => { event.preventDefault(); setLeaderboardOpen(false); }} aria-label={t("JOolo home")}><span className="brand-mark">✦</span><span>JO<span className="brand-muted">O</span>LO<span className="brand-dot">.</span></span></a>
+          <a href="#top" className="brand" onClick={(event) => { event.preventDefault(); setLeaderboardOpen(false); }} aria-label={t("JOOLO home")}><span className="brand-mark">✦</span><span>JO<span className="brand-muted">O</span>LO<span className="brand-dot">.</span></span></a>
           <nav className="main-nav" aria-label={t("Main navigation")}>
             <button className="nav-link active leaderboard-nav-active" onClick={() => setLeaderboardOpen(false)}>{t("Leaderboard")}</button>
             <button className="nav-link" onClick={() => { setLeaderboardOpen(false); jumpToChallenges(); }}>{t("Challenge")}</button>
@@ -2992,8 +3165,7 @@ export default function DashboardClient({
               </div>
               <p className="chart-data-note">{t("Your line shows the coins you earned each day. Days without recorded progress are left blank.")}</p>
             </div>
-          </section> : <>
-            <p className="leaderboard-period-note">{t(leaderboardPeriod === "daily" ? "Daily coin totals for today's challenge day in WIB." : "Weekly coin totals for the last 7 days.")}</p>
+          </section>           : <>
             {leaderboardLoading
               ? <p className="leaderboard-state" role="status">{t("Loading leaderboard...")}</p>
               : leaderboardError
@@ -3001,13 +3173,12 @@ export default function DashboardClient({
                 : rankedLeaderboard.length === 0
                   ? <p className="leaderboard-state">{t("No coins earned in this period yet.")}</p>
                   : <>
-                    <p className="leaderboard-top-ten-note">{t("Top 10 members by total coins earned.")}</p>
                     {topLeaders.length === 3 && <section className="podium" aria-label={t("Top three players")}>
                       {[{ leader: topLeaders[1], rank: 2 }, { leader: topLeaders[0], rank: 1 }, { leader: topLeaders[2], rank: 3 }].map(({ leader, rank }) => (
                         <article className={`podium-player podium-${rank}`} key={leader.userId}>
                           <div className="podium-rank">{rank === 1 && <span className="crown">♛</span>}{rank}</div>
                           <div className="podium-avatar-wrap"><Image src={leader.avatarUrl || (leader.gender === "man" ? "/AVATAR/Man/Ray.png" : "/AVATAR/Woman/Luna.png")} alt="" className="podium-avatar" width={240} height={240} sizes="(max-width: 560px) 105px, 138px" /><span className="avatar-glow" /></div>
-                          <strong>{leader.displayName || t("JOolo member")}</strong><span className="podium-title">{t(leaderboardPeriod === "daily" ? "Daily coins" : "Weekly coins")}</span>
+                          <strong>{leader.displayName || t("JOOLO member")}</strong><span className="podium-title">{t(leaderboardPeriod === "daily" ? "Daily coins" : "Weekly coins")}</span>
                           <div className="podium-score"><span className="leader-coin">✦</span>{leader.totalCoin.toLocaleString()}</div>
                         </article>
                       ))}
@@ -3018,7 +3189,7 @@ export default function DashboardClient({
                         return <article className={`leader-list-row ${isYou ? "you" : ""}`} key={leader.userId}>
                           <span className="list-rank">{leader.rank}</span>
                           <Image className="list-avatar" src={leader.avatarUrl || (leader.gender === "man" ? "/AVATAR/Man/Ray.png" : "/AVATAR/Woman/Luna.png")} alt="" width={100} height={100} sizes="48px" />
-                          <span className="list-player">{leader.displayName || t("JOolo member")}<small>{isYou ? t("Your cosmic journey") : t(leaderboardPeriod === "daily" ? "Daily coins" : "Weekly coins")}</small></span>
+                          <span className="list-player">{leader.displayName || t("JOOLO member")}<small>{isYou ? t("Your cosmic journey") : t(leaderboardPeriod === "daily" ? "Daily coins" : "Weekly coins")}</small></span>
                           <span className="list-score"><span className="leader-coin">✦</span><b>{leader.totalCoin.toLocaleString()}</b></span>
                         </article>;
                       })}

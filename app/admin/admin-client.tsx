@@ -4,8 +4,20 @@ import { FormEvent, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { UploadedBonusResource, BonusType } from "@/lib/bonus";
 
-const maxImageSize = 5 * 1024 * 1024;
-const imageTypes = ["image/jpeg", "image/png", "image/webp"];
+function getGoogleDriveImageUrl(value: string): string | null {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.hostname !== "drive.google.com") return null;
+
+    const fileId = url.pathname.match(/^\/file\/d\/([^/]+)/)?.[1] ?? url.searchParams.get("id");
+    if (!fileId || !/^[A-Za-z0-9_-]+$/.test(fileId)) return null;
+
+    return `https://lh3.googleusercontent.com/d/${encodeURIComponent(fileId)}=w1200`;
+  } catch {
+    return null;
+  }
+}
+
 export type AdminCoinTestUser = {
   user_id: string;
   display_name: string;
@@ -186,14 +198,10 @@ export default function AdminClient({
     const title = String(values.get("title") ?? "").trim();
     const description = String(values.get("description") ?? "").trim();
     const downloadUrl = String(values.get("downloadUrl") ?? "").trim();
-    const cover = values.get("cover");
+    const coverImageUrl = getGoogleDriveImageUrl(String(values.get("coverUrl") ?? "").trim());
 
-    if (!(cover instanceof File) || cover.size === 0) {
-      setErrorMessage("Pilih gambar sampul untuk resource ini.");
-      return;
-    }
-    if (!imageTypes.includes(cover.type) || cover.size > maxImageSize) {
-      setErrorMessage("Sampul harus berupa JPG, PNG, atau WebP dengan ukuran maksimal 5 MB.");
+    if (!coverImageUrl) {
+      setErrorMessage("Masukkan link gambar Google Drive yang valid (format file/d/ID atau open?id=ID).");
       return;
     }
     try {
@@ -207,29 +215,16 @@ export default function AdminClient({
       return;
     }
 
-    const extension = cover.type === "image/jpeg" ? "jpg" : cover.type === "image/png" ? "png" : "webp";
-    const storagePath = `${userId}/${crypto.randomUUID()}.${extension}`;
     setBusy(true);
 
     const supabase = createClient();
-    const { error: uploadError } = await supabase.storage
-      .from("bonus-covers")
-      .upload(storagePath, cover, { contentType: cover.type, upsert: false });
-
-    if (uploadError) {
-      setErrorMessage(`Gagal mengunggah sampul: ${uploadError.message}`);
-      setBusy(false);
-      return;
-    }
-
-    const { data: { publicUrl } } = supabase.storage.from("bonus-covers").getPublicUrl(storagePath);
     const { data: resource, error: insertError } = await supabase
       .from("bonus_resources")
       .insert({
         type,
         title,
         description,
-        image_url: publicUrl,
+        image_url: coverImageUrl,
         download_url: downloadUrl,
         created_by: userId,
       })
@@ -237,17 +232,14 @@ export default function AdminClient({
       .single();
 
     if (insertError) {
-      const { error: cleanupError } = await supabase.storage.from("bonus-covers").remove([storagePath]);
-      setErrorMessage(cleanupError
-        ? `Gagal menyimpan resource: ${insertError.message}. Pembersihan sampul juga gagal: ${cleanupError.message}`
-        : `Gagal menyimpan resource: ${insertError.message}`);
+      setErrorMessage(`Gagal menyimpan resource: ${insertError.message}`);
       setBusy(false);
       return;
     }
 
     setResources((items) => [resource as UploadedBonusResource, ...items]);
     form.reset();
-    setMessage("Resource berhasil diunggah dan sekarang muncul di menu Bonus.");
+    setMessage("Resource berhasil disimpan dan sekarang muncul di menu Bonus.");
     setBusy(false);
   }
 
@@ -264,7 +256,7 @@ export default function AdminClient({
       ? decodeURIComponent(resource.image_url.slice(markerIndex + marker.length))
       : null;
 
-    if (!storagePath || !storagePath.startsWith(`${userId}/`)) {
+    if (markerIndex >= 0 && (!storagePath || !storagePath.startsWith(`${userId}/`))) {
       setErrorMessage("Sampul tidak berada pada lokasi Storage yang diharapkan; resource tidak dihapus.");
       setBusy(false);
       return;
@@ -278,11 +270,15 @@ export default function AdminClient({
     }
 
     setResources((items) => items.filter((item) => item.id !== resource.id));
-    const { error: storageError } = await supabase.storage.from("bonus-covers").remove([storagePath]);
-    if (storageError) {
-      setErrorMessage(`Resource dihapus, tetapi sampul gagal dibersihkan dari Storage: ${storageError.message}`);
-    } else {
+    if (!storagePath) {
       setMessage("Resource berhasil dihapus.");
+    } else {
+      const { error: storageError } = await supabase.storage.from("bonus-covers").remove([storagePath]);
+      if (storageError) {
+        setErrorMessage(`Resource dihapus, tetapi sampul gagal dibersihkan dari Storage: ${storageError.message}`);
+      } else {
+        setMessage("Resource berhasil dihapus.");
+      }
     }
     setBusy(false);
   }
@@ -304,13 +300,13 @@ export default function AdminClient({
       <div className="admin-content shell">
         <section className="admin-heading">
           <span className="eyebrow"><span className="eyebrow-line" /> ADMINISTRATION</span>
-          <h1>Manage <span>JOolo</span></h1>
+          <h1>Manage <span>JOOLO</span></h1>
           <p>Kelola resource Bonus dan data pengguna uji leaderboard. Perubahan skor pengguna uji langsung memengaruhi peringkat Daily dan Weekly.</p>
         </section>
 
         <section className="admin-panel" aria-labelledby="admin-upload-title">
           <span className="eyebrow">PUBLISH A RESOURCE</span>
-          <h2 id="admin-upload-title">Upload bonus resource</h2>
+          <h2 id="admin-upload-title">Tambah bonus resource</h2>
           <form className="admin-form" onSubmit={(event) => { void uploadResource(event); }}>
             <label htmlFor="bonus-type">JENIS RESOURCE</label>
             <select id="bonus-type" name="type" defaultValue="ebook" required>
@@ -324,8 +320,9 @@ export default function AdminClient({
             <label htmlFor="bonus-description">DESKRIPSI SINGKAT</label>
             <textarea id="bonus-description" name="description" maxLength={300} rows={3} placeholder="Jelaskan isi dan manfaat resource ini." required />
 
-            <label htmlFor="bonus-cover">GAMBAR SAMPUL (JPG, PNG, WEBP; MAKS. 5 MB)</label>
-            <input id="bonus-cover" name="cover" type="file" accept="image/jpeg,image/png,image/webp" required />
+            <label htmlFor="bonus-cover">LINK GAMBAR SAMPUL GOOGLE DRIVE</label>
+            <input id="bonus-cover" name="coverUrl" type="url" placeholder="https://drive.google.com/file/d/..." required />
+            <small>Pastikan akses file di Google Drive diatur ke “Siapa saja yang memiliki link”.</small>
 
             <label htmlFor="bonus-download-url">LINK DOWNLOAD GOOGLE DRIVE</label>
             <input id="bonus-download-url" name="downloadUrl" type="url" placeholder="https://drive.google.com/..." required />
@@ -333,7 +330,7 @@ export default function AdminClient({
             {errorMessage && <p className="admin-feedback is-error" role="alert">{errorMessage}</p>}
             {message && <p className="admin-feedback" role="status">{message}</p>}
             <button className="primary-button admin-submit" type="submit" disabled={busy}>
-              {busy ? "Menyimpan..." : "Upload ke Bonus"}
+              {busy ? "Menyimpan..." : "Simpan ke Bonus"}
             </button>
           </form>
         </section>

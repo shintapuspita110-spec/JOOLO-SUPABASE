@@ -123,7 +123,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
       <div className="nebula nebula-left" />
       <div className="nebula nebula-right" />
       <section className="login-card" aria-labelledby="auth-title">
-        <Link href="/" className="brand login-brand" aria-label="JOolo">
+        <Link href="/" className="brand login-brand" aria-label="JOOLO">
           <span className="brand-mark">✦</span>
           <span>JO<span className="brand-muted">O</span>LO<span className="brand-dot">.</span></span>
         </Link>
@@ -182,7 +182,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
           </button>
         </form>
         <p className="auth-switch">
-          {isSignup ? "Already have an account? " : "New to JOolo? "}
+          {isSignup ? "Already have an account? " : "New to JOOLO? "}
           <Link href={isSignup ? "/login" : "/signup"}>{isSignup ? "Log in" : "Create account"}</Link>
         </p>
         <div className="login-footer"><span>✦</span> Small steps. Stellar progress.</div>

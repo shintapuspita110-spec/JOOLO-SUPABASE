@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "JOolo — Your next chapter starts here",
+  title: "JOOLO — Your next chapter starts here",
   description: "A 40-day cosmic self-growth challenge. Small steps, stellar progress.",
 };
 

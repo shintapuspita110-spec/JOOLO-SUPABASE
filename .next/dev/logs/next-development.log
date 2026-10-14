@@ -1,17 +1,34 @@
-{"timestamp":"00:00:07.638","source":"Server","level":"LOG","message":""}
-{"timestamp":"00:00:15.371","source":"Browser","level":"INFO","message":"Download the React DevTools for a better development experience: https://react.dev/link/react-devtools"}
-{"timestamp":"00:00:23.616","source":"Browser","level":"INFO","message":"Download the React DevTools for a better development experience: https://react.dev/link/react-devtools"}
-{"timestamp":"00:01:38.847","source":"Browser","level":"INFO","message":"Download the React DevTools for a better development experience: https://react.dev/link/react-devtools"}
-{"timestamp":"00:01:47.174","source":"Browser","level":"WARN","message":"Detected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior=\"smooth\"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior"}
-{"timestamp":"00:01:47.212","source":"Server","level":"WARN","message":"[browser] \"\\u001b[33mDetected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior=\\\"smooth\\\"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior\\u001b[39m\""}
-{"timestamp":"00:09:12.138","source":"Server","level":"LOG","message":"✓ Compiled in 3.7s"}
-{"timestamp":"00:09:22.824","source":"Server","level":"LOG","message":"✓ Compiled in 636ms"}
-{"timestamp":"00:26:35.078","source":"Server","level":"LOG","message":"✓ Compiled in 1302ms"}
-{"timestamp":"00:39:18.078","source":"Browser","level":"INFO","message":"Download the React DevTools for a better development experience: https://react.dev/link/react-devtools"}
-{"timestamp":"00:44:14.336","source":"Server","level":"LOG","message":"✓ Compiled in 2.2s"}
-{"timestamp":"00:45:05.394","source":"Server","level":"LOG","message":"✓ Compiled in 3s"}
-{"timestamp":"00:46:36.293","source":"Browser","level":"WARN","message":"Detected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior=\"smooth\"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior"}
-{"timestamp":"00:46:36.303","source":"Server","level":"WARN","message":"[browser] \"\\u001b[33mDetected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior=\\\"smooth\\\"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior\\u001b[39m\""}
-{"timestamp":"00:55:34.016","source":"Browser","level":"INFO","message":"Download the React DevTools for a better development experience: https://react.dev/link/react-devtools"}
-{"timestamp":"00:55:49.560","source":"Browser","level":"WARN","message":"Detected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior=\"smooth\"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior"}
-{"timestamp":"00:55:49.561","source":"Server","level":"WARN","message":"[browser] \"\\u001b[33mDetected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior=\\\"smooth\\\"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior\\u001b[39m\""}
+{"timestamp":"00:00:14.522","source":"Server","level":"LOG","message":""}
+{"timestamp":"00:00:31.721","source":"Server","level":"LOG","message":"✓ Finished filesystem cache database compaction in 10.5s"}
+{"timestamp":"00:00:37.961","source":"Browser","level":"INFO","message":"Download the React DevTools for a better development experience: https://react.dev/link/react-devtools"}
+{"timestamp":"00:02:39.171","source":"Browser","level":"INFO","message":"Download the React DevTools for a better development experience: https://react.dev/link/react-devtools"}
+{"timestamp":"00:10:51.282","source":"Server","level":"LOG","message":"✓ Compiled in 10.2s"}
+{"timestamp":"00:11:03.370","source":"Browser","level":"ERROR","message":"Could not load bonus cover image https://drive.google.com/thumbnail?id=1jfp1Hf0RPLKLIPY6qbzHKjcMIBkVB97x&sz=w1200 "}
+{"timestamp":"00:11:03.379","source":"Server","level":"ERROR","message":"[browser] \"Could not load bonus cover image\" \"https://drive.google.com/thumbnail?id=1jfp1Hf0RPLKLIPY6qbzHKjcMIBkVB97x&sz=w1200\" \"\""}
+{"timestamp":"00:11:10.254","source":"Server","level":"LOG","message":"✓ Compiled in 2.3s"}
+{"timestamp":"00:13:43.167","source":"Browser","level":"INFO","message":"Download the React DevTools for a better development experience: https://react.dev/link/react-devtools"}
+{"timestamp":"00:13:48.608","source":"Browser","level":"ERROR","message":"Could not load bonus cover image https://drive.google.com/thumbnail?id=1jfp1Hf0RPLKLIPY6qbzHKjcMIBkVB97x&sz=w1200 "}
+{"timestamp":"00:13:48.609","source":"Server","level":"ERROR","message":"[browser] \"Could not load bonus cover image\" \"https://drive.google.com/thumbnail?id=1jfp1Hf0RPLKLIPY6qbzHKjcMIBkVB97x&sz=w1200\" \"\""}
+{"timestamp":"00:17:37.346","source":"Browser","level":"ERROR","message":"Could not load bonus cover image https://drive.google.com/thumbnail?id=1jfp1Hf0RPLKLIPY6qbzHKjcMIBkVB97x&sz=w1200 "}
+{"timestamp":"00:17:37.355","source":"Server","level":"ERROR","message":"[browser] \"Could not load bonus cover image\" \"https://drive.google.com/thumbnail?id=1jfp1Hf0RPLKLIPY6qbzHKjcMIBkVB97x&sz=w1200\" \"\""}
+{"timestamp":"00:17:50.357","source":"Server","level":"LOG","message":"○ Compiling /api/bonus-cover ..."}
+{"timestamp":"00:19:12.770","source":"Browser","level":"INFO","message":"Download the React DevTools for a better development experience: https://react.dev/link/react-devtools"}
+{"timestamp":"00:22:52.324","source":"Server","level":"LOG","message":"✓ Compiled in 2.2s"}
+{"timestamp":"00:29:36.660","source":"Server","level":"LOG","message":"✓ Compiled in 3.8s"}
+{"timestamp":"00:30:17.399","source":"Server","level":"LOG","message":"✓ Compiled in 5.4s"}
+{"timestamp":"00:37:16.362","source":"Server","level":"LOG","message":"✓ Compiled in 1541ms"}
+{"timestamp":"00:44:30.799","source":"Server","level":"LOG","message":"✓ Compiled in 1882ms"}
+{"timestamp":"00:49:39.011","source":"Browser","level":"INFO","message":"Download the React DevTools for a better development experience: https://react.dev/link/react-devtools"}
+{"timestamp":"00:50:06.529","source":"Browser","level":"INFO","message":"Download the React DevTools for a better development experience: https://react.dev/link/react-devtools"}
+{"timestamp":"00:53:23.352","source":"Browser","level":"INFO","message":"Download the React DevTools for a better development experience: https://react.dev/link/react-devtools"}
+{"timestamp":"00:53:56.673","source":"Browser","level":"INFO","message":"Download the React DevTools for a better development experience: https://react.dev/link/react-devtools"}
+{"timestamp":"00:56:46.640","source":"Browser","level":"INFO","message":"Download the React DevTools for a better development experience: https://react.dev/link/react-devtools"}
+{"timestamp":"00:57:29.075","source":"Browser","level":"INFO","message":"Download the React DevTools for a better development experience: https://react.dev/link/react-devtools"}
+{"timestamp":"01:04:06.222","source":"Server","level":"LOG","message":"✓ Compiled in 1897ms"}
+{"timestamp":"01:04:40.623","source":"Server","level":"LOG","message":"✓ Compiled in 495ms"}
+{"timestamp":"01:30:58.045","source":"Server","level":"LOG","message":"✓ Compiled in 3.7s"}
+{"timestamp":"01:36:02.052","source":"Server","level":"LOG","message":"✓ Compiled in 3.1s"}
+{"timestamp":"01:36:47.300","source":"Browser","level":"INFO","message":"Download the React DevTools for a better development experience: https://react.dev/link/react-devtools"}
+{"timestamp":"01:37:03.225","source":"Browser","level":"INFO","message":"Download the React DevTools for a better development experience: https://react.dev/link/react-devtools"}
+{"timestamp":"01:41:09.250","source":"Server","level":"LOG","message":"✓ Compiled in 3.7s"}
+{"timestamp":"01:52:07.328","source":"Server","level":"LOG","message":"✓ Compiled in 9.2s"}
