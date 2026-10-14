@@ -107,11 +107,13 @@ export default function AdminClient({
       || !Number.isSafeInteger(dailyCoin)
       || dailyCoin < 0
       || dailyCoin > 10_000_000
+      || dailyCoin % 10 !== 0
       || !Number.isSafeInteger(weeklyCoin)
       || weeklyCoin < 0
       || weeklyCoin > 10_000_000
+      || weeklyCoin % 10 !== 0
     ) {
-      setCoinTestUsersError("Isi nama dan jumlah koin bilangan bulat antara 0 dan 10.000.000.");
+      setCoinTestUsersError("Isi nama dan jumlah koin kelipatan 10 antara 0 dan 10.000.000.");
       return;
     }
 
@@ -391,7 +393,7 @@ export default function AdminClient({
                   type="number"
                   min={0}
                   max={10_000_000}
-                  step={1}
+                  step={10}
                   required
                   value={coinTestUserDraft.dailyCoin}
                   onChange={(event) => {
@@ -407,7 +409,7 @@ export default function AdminClient({
                   type="number"
                   min={0}
                   max={10_000_000}
-                  step={1}
+                  step={10}
                   required
                   value={coinTestUserDraft.weeklyCoin}
                   onChange={(event) => {

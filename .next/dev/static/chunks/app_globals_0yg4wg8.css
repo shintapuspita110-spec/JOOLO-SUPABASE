@@ -6116,7 +6116,7 @@ h1, h2, h3, p {
 
 .progress-chart {
   width: 100%;
-  min-width: 700px;
+  min-width: 1100px;
   height: auto;
   display: block;
   overflow: visible;
@@ -6142,41 +6142,6 @@ h1, h2, h3, p {
   font: 10px DM Sans, sans-serif;
 }
 
-.leader-benchmark-line {
-  stroke-width: 2px;
-  stroke-dasharray: 7 6;
-  opacity: .83;
-}
-
-.leader-benchmark-dot {
-  stroke: #0c1728;
-  stroke-width: 2px;
-}
-
-.leader-benchmark-1 .leader-benchmark-line {
-  stroke: #f5c978;
-}
-
-.leader-benchmark-1 .leader-benchmark-dot {
-  fill: #f5c978;
-}
-
-.leader-benchmark-2 .leader-benchmark-line {
-  stroke: #ee67db;
-}
-
-.leader-benchmark-2 .leader-benchmark-dot {
-  fill: #ee67db;
-}
-
-.leader-benchmark-3 .leader-benchmark-line {
-  stroke: #a58af2;
-}
-
-.leader-benchmark-3 .leader-benchmark-dot {
-  fill: #a58af2;
-}
-
 .user-progress-line {
   fill: none;
   stroke: #5cf2e2;
@@ -6191,6 +6156,15 @@ h1, h2, h3, p {
   stroke: #0b1826;
   stroke-width: 2px;
   filter: drop-shadow(0 0 4px #5cf2e28c);
+}
+
+.user-progress-value {
+  fill: #e5fffb;
+  paint-order: stroke;
+  stroke: #0b1826;
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  font: 700 9px DM Sans, sans-serif;
 }
 
 .chart-legend {
@@ -6212,22 +6186,6 @@ h1, h2, h3, p {
   border-top: 2px solid #5cf2e2;
   width: 17px;
   height: 0;
-}
-
-.chart-leader-legend i {
-  border-top-style: dashed;
-}
-
-.chart-leader-legend.leader-benchmark-1 i {
-  border-color: #f5c978;
-}
-
-.chart-leader-legend.leader-benchmark-2 i {
-  border-color: #ee67db;
-}
-
-.chart-leader-legend.leader-benchmark-3 i {
-  border-color: #a58af2;
 }
 
 .chart-data-note {
@@ -6266,7 +6224,7 @@ h1, h2, h3, p {
   }
 
   .progress-chart {
-    min-width: 650px;
+    min-width: 1100px;
   }
 
   .chart-legend {

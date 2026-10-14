@@ -151,7 +151,7 @@ select
     when dates.day_offset = 0 then now()
     else (dates.earned_on + time '12:00') at time zone 'Asia/Jakarta'
   end,
-  200 + mod(users.user_number * 17 + dates.day_offset * 29, 251)
+  200 + 10 * mod(users.user_number * 17 + dates.day_offset * 29, 26)
 from generate_series(1, 100) as users(user_number)
 cross join generate_series(0, 6) as day_offsets(day_offset)
 cross join lateral (
@@ -159,7 +159,17 @@ cross join lateral (
     (now() at time zone 'Asia/Jakarta')::date - day_offsets.day_offset as earned_on,
     day_offsets.day_offset
 ) as dates
-on conflict (user_id, earned_on) do nothing;
+on conflict (user_id, earned_on) do update
+  set earned_coin = excluded.earned_coin;
+
+update public.coin_leaderboard_test_events
+  set earned_coin = earned_coin - mod(earned_coin, 10)
+  where mod(earned_coin, 10) <> 0;
+
+update public.coin_leaderboard_test_score_overrides
+  set daily_coin = daily_coin - mod(daily_coin, 10),
+      weekly_coin = weekly_coin - mod(weekly_coin, 10)
+  where mod(daily_coin, 10) <> 0 or mod(weekly_coin, 10) <> 0;
 
 insert into public.coin_leaderboard_test_score_overrides (user_id, daily_coin, weekly_coin)
 select
@@ -185,6 +195,8 @@ select
   (select count(*) from public.coin_leaderboard_test_events) as saved_test_coin_event_count,
   (select min(earned_coin) from public.coin_leaderboard_test_events) as min_saved_daily_coin,
   (select max(earned_coin) from public.coin_leaderboard_test_events) as max_saved_daily_coin,
+  (select count(*) from public.coin_leaderboard_test_events where mod(earned_coin, 10) <> 0) as invalid_test_event_coin_count,
+  (select count(*) from public.coin_leaderboard_test_score_overrides where mod(daily_coin, 10) <> 0 or mod(weekly_coin, 10) <> 0) as invalid_test_override_coin_count,
   (
     select count(*)
       from public.coin_leaderboard_test_events

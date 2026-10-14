@@ -233,7 +233,7 @@ const indonesianTranslations: Record<string, string> = {
   "Save profile": "Simpan profil",
   "A FRESH ORBIT": "AWAL YANG BARU",
   "Reset your journey?": "Atur ulang perjalanan Anda?",
-  "This clears your saved challenges, stardust, and preferences on this device. This can’t be undone.": "Tindakan ini menghapus tantangan, koin, dan preferensi tersimpan di perangkat ini. Tindakan ini tidak dapat dibatalkan.",
+  "This clears your saved challenges, coins, and preferences on this device. This can’t be undone.": "Tindakan ini menghapus tantangan, koin, dan preferensi tersimpan di perangkat ini. Tindakan ini tidak dapat dibatalkan.",
   "Keep my progress": "Pertahankan progres",
   "Reset everything": "Atur ulang semuanya",
   "YOUR NEXT MILESTONE": "PENCAPAIAN BERIKUTNYA",
@@ -274,11 +274,9 @@ const indonesianTranslations: Record<string, string> = {
   "DOWNLOAD XLSX": "UNDUH XLSX",
   "PDF · Google Drive": "PDF · Google Drive",
   "Excel · Google Drive": "Excel · Google Drive",
-  "benchmark": "pembanding",
   "Your daily leaderboard": "Papan peringkat harian Anda",
-  "Daily stardust progress over 40 challenge days": "Progres koin harian selama 40 hari tantangan",
-  "Your recorded daily stardust is shown with a cyan line. Gold, pink, and purple horizontal lines show current daily benchmark scores for the top three leaderboard players.": "Koin harian tercatat ditampilkan dengan garis sian. Garis emas, merah muda, dan ungu menunjukkan skor harian saat ini dari tiga peringkat teratas.",
-  "Daily stardust": "Koin harian",
+  "Daily coin progress over 40 challenge days": "Progres koin harian selama 40 hari tantangan",
+  "Your recorded daily coins are shown with a cyan line. Days without recorded progress are left blank.": "Koin harian yang tercatat ditampilkan dengan garis sian. Hari tanpa progres tercatat dibiarkan kosong.",
   "daily leaderboard": "papan peringkat harian",
   "Opening your orbit...": "Membuka perjalanan Anda...",
   "Your journey overview": "Ringkasan perjalanan Anda",
@@ -335,13 +333,13 @@ const indonesianTranslations: Record<string, string> = {
   "The leaderboard could not be loaded. Please try again.": "Papan peringkat gagal dimuat. Silakan coba lagi.",
   "Loading leaderboard...": "Memuat papan peringkat...",
   "No coins earned in this period yet.": "Belum ada koin yang diperoleh pada periode ini.",
-  "Top 100 members by total coins earned.": "100 anggota teratas berdasarkan total koin yang diperoleh.",
+  "Top 10 members by total coins earned.": "10 anggota teratas berdasarkan total koin yang diperoleh.",
   "Leaderboard pagination": "Paginasi papan peringkat",
   "Showing ranks ": "Menampilkan peringkat ",
   " of ": " dari ",
   "Previous leaderboard page": "Halaman papan peringkat sebelumnya",
   "Next leaderboard page": "Halaman papan peringkat berikutnya",
-  "Daily coin totals for the current day in WIB.": "Total koin harian untuk hari ini berdasarkan WIB.",
+  "Daily coin totals for today's challenge day in WIB.": "Total koin untuk hari tantangan saat ini berdasarkan WIB.",
   "Weekly coin totals for the last 7 days.": "Total koin mingguan selama 7 hari terakhir.",
   "Daily coins": "Koin harian",
   "Weekly coins": "Koin mingguan",
@@ -399,7 +397,6 @@ const indonesianTranslations: Record<string, string> = {
   "YOUR COSMIC JOURNEY": "PERJALANAN ANDA",
   "Edit profile": "Edit profil",
   "challenges": "tantangan",
-  "stardust": "koin",
   "PREFERENCES": "PREFERENSI",
   "Appearance": "Tampilan",
   "Appearance theme": "Tema tampilan",
@@ -435,7 +432,7 @@ const indonesianTranslations: Record<string, string> = {
   "SCORE": "SKOR",
   "Find your ": "Temukan ",
   "orbit.": "lingkaran Anda.",
-  "Every small step deserves a little stardust.": "Setiap langkah kecil layak dirayakan.",
+  "Every small step deserves a few coins.": "Setiap langkah kecil layak dirayakan.",
   "Leaderboard period": "Periode papan peringkat",
   "daily": "harian",
   "weekly": "mingguan",
@@ -443,14 +440,15 @@ const indonesianTranslations: Record<string, string> = {
   "40-day progress dashboard": "Dasbor progres 40 hari",
   "YOUR 40-DAY JOURNEY": "PERJALANAN 40 HARI ANDA",
   "Progress in orbit.": "Progres perjalanan.",
-  "Track your daily stardust and compare it with today’s Daily leaderboard leaders.": "Pantau koin harian Anda dan bandingkan dengan peringkat teratas hari ini.",
-  "DAILY STARDUST": "KOIN HARIAN",
+  "Track your daily coins across your 40-day journey.": "Pantau koin harian Anda sepanjang perjalanan 40 hari.",
+  "DAILY COINS": "KOIN HARIAN",
   "Day-by-day progress": "Progres hari demi hari",
-  "STARDUST / DAY": "KOIN / HARI",
+  "COINS / DAY": "KOIN / HARI",
+  "coins earned": "koin diperoleh",
   "Chart lines": "Garis grafik",
-  "You · daily stardust": "Anda · koin harian",
-  "Your line records stardust from challenges you complete from now on; unrecorded days are left blank. Leader lines are today’s Daily scores used as comparison benchmarks, not historical records.": "Garis Anda mencatat koin dari tantangan yang diselesaikan mulai sekarang; hari tanpa catatan dibiarkan kosong. Garis peringkat menunjukkan skor harian saat ini sebagai pembanding, bukan riwayat.",
-  "STARDUST EARNED": "KOIN TERKUMPUL",
+  "You · daily coins": "Anda · koin harian",
+  "Your line shows the coins you earned each day. Days without recorded progress are left blank.": "Garis menunjukkan koin yang Anda peroleh setiap hari. Hari tanpa progres tercatat dibiarkan kosong.",
+  "COINS EARNED": "KOIN TERKUMPUL",
   "Top three players": "Tiga pemain teratas",
   "Leaderboard ranks": "Peringkat",
   "Your cosmic journey": "Perjalanan Anda",
@@ -477,8 +475,8 @@ const indonesianTranslations: Record<string, string> = {
   "Your 40-day journey is complete. This certificate has been added to your milestones.": "Perjalanan 40 hari Anda selesai. Sertifikat ini telah ditambahkan ke pencapaian Anda.",
   "JOolo home": "Beranda JOolo",
   "PHASE 1": "FASE 1",
-  "Choose a day on your 40-day map, complete a small daily challenge, and collect stardust as you build consistency. Your progress is saved on this device.": "Pilih hari pada peta 40 hari, selesaikan tantangan harian kecil, dan kumpulkan koin sambil membangun konsistensi. Progres Anda tersimpan di perangkat ini.",
-  "Each completed challenge earns the stardust shown on its card. Your balance appears here and on your journey dashboard.": "Setiap tantangan yang diselesaikan memberi koin sesuai jumlah pada kartunya. Saldo Anda ditampilkan di sini dan pada dasbor perjalanan.",
+  "Choose a day on your 40-day map, complete a small daily challenge, and collect coins as you build consistency. Your progress is saved on this device.": "Pilih hari pada peta 40 hari, selesaikan tantangan harian kecil, dan kumpulkan koin sambil membangun konsistensi. Progres Anda tersimpan di perangkat ini.",
+  "Each completed challenge earns the coins shown on its card. Your balance appears here and on your journey dashboard.": "Setiap tantangan yang diselesaikan memberi koin sesuai jumlah pada kartunya. Saldo Anda ditampilkan di sini dan pada dasbor perjalanan.",
   "Challenge progress saved.": "Progres tantangan berhasil disimpan.",
   "Challenge progress updated.": "Progres tantangan berhasil diperbarui.",
   "Challenge removed.": "Tantangan berhasil dihapus.",
@@ -872,7 +870,6 @@ export default function DashboardClient({
   const [bonusSearchOpen, setBonusSearchOpen] = useState(false);
   const [bonusSearch, setBonusSearch] = useState("");
   const [leaderboardPeriod, setLeaderboardPeriod] = useState<LeaderboardPeriod>("weekly");
-  const [leaderboardPage, setLeaderboardPage] = useState(0);
   const [coinLeaderboard, setCoinLeaderboard] = useState<CoinLeaderboardEntry[]>([]);
   const [dailyLeaderboardRank, setDailyLeaderboardRank] = useState(0);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
@@ -1133,20 +1130,13 @@ export default function DashboardClient({
   const canClaimCertificate = Array.from({ length: 40 }, (_, index) => index + 1)
     .every((day) => completedPhaseDays.has(day));
   const progress = Math.round((completed / Math.max(activeChallenges.length, 1)) * 100);
-  const dailyLeaders = leaderboardPeriod === "phase"
-    ? coinLeaderboard.filter((leader) => leader.rank <= 3)
-    : leaderboardPeriod === "daily"
-      ? coinLeaderboard.filter((leader) => leader.rank <= 3)
-      : [];
   const rankedLeaderboard = coinLeaderboard.filter((leader) => leader.rank <= 100);
-  const topLeaders = rankedLeaderboard.slice(0, 3);
-  const pageSize = 10;
-  const leaderboardPageCount = Math.ceil(Math.max(0, rankedLeaderboard.length - 3) / pageSize);
-  const visibleLeaderboardPage = Math.min(leaderboardPage, Math.max(0, leaderboardPageCount - 1));
-  const pageLeaders = rankedLeaderboard.slice(3 + visibleLeaderboardPage * pageSize, 3 + (visibleLeaderboardPage + 1) * pageSize);
+  const topTenLeaders = rankedLeaderboard.slice(0, 10);
+  const topLeaders = topTenLeaders.slice(0, 3);
+  const remainingTopTenLeaders = topTenLeaders.slice(3);
   const chartBounds = { left: 72, top: 20, width: 820, height: 270 };
-  const chartMaxValue = Math.max(1000, ...dailyLeaders.map((leader) => leader.totalCoin), ...Object.values(dailyStardustByDay));
-  const chartYMax = Math.ceil(chartMaxValue / 200) * 200;
+  const chartMaxValue = Math.max(0, ...Object.values(dailyStardustByDay));
+  const chartYMax = chartMaxValue > 500 ? 1000 : 500;
   const chartX = (day: number) => chartBounds.left + ((day - 1) / 39) * chartBounds.width;
   const chartY = (score: number) => chartBounds.top + chartBounds.height - (score / chartYMax) * chartBounds.height;
   const userRecordedPoints = Array.from({ length: 40 }, (_, index) => ({
@@ -2732,7 +2722,7 @@ export default function DashboardClient({
             <div className="profile-stats">
               <div><Icon name="sparkles" size={18} /><span>{t("PHASE 1")}</span></div>
               <div><Icon name="trophy" size={18} /><span>{completed} <small>{t("challenges")}</small></span></div>
-              <div><span className="profile-coin">✦</span><span>{coins} <small>{t("stardust")}</small></span></div>
+              <div><span className="profile-coin">✦</span><span>{coins} <small>{t("coin")}</small></span></div>
             </div>
           </section>
           <section className="profile-panel profile-preferences">
@@ -2750,9 +2740,9 @@ export default function DashboardClient({
           <section className="profile-panel">
             <span className="profile-section-label">{t("APP GUIDE")}</span>
             <button className={`profile-action-row guide-row ${expandedGuide === "how" ? "expanded" : ""}`} onClick={() => setExpandedGuide((value) => value === "how" ? null : "how")}><span className="profile-row-icon"><Icon name="book" size={24} /></span><strong>{t("How to Use")}</strong><Icon name="chevron" size={21} /></button>
-            {expandedGuide === "how" && <p className="profile-guide-copy">{t("Choose a day on your 40-day map, complete a small daily challenge, and collect stardust as you build consistency. Your progress is saved on this device.")}</p>}
+            {expandedGuide === "how" && <p className="profile-guide-copy">{t("Choose a day on your 40-day map, complete a small daily challenge, and collect coins as you build consistency. Your progress is saved on this device.")}</p>}
             <button className={`profile-action-row guide-row ${expandedGuide === "points" ? "expanded" : ""}`} onClick={() => setExpandedGuide((value) => value === "points" ? null : "points")}><span className="profile-row-icon"><Icon name="star" size={24} /></span><strong>{t("Points Explained")}</strong><Icon name="chevron" size={21} /></button>
-            {expandedGuide === "points" && <p className="profile-guide-copy">{t("Each completed challenge earns the stardust shown on its card. Your balance appears here and on your journey dashboard.")}</p>}
+            {expandedGuide === "points" && <p className="profile-guide-copy">{t("Each completed challenge earns the coins shown on its card. Your balance appears here and on your journey dashboard.")}</p>}
           </section>
           <section className="profile-panel">
             <span className="profile-section-label">{t("SUPPORT")}</span>
@@ -2767,7 +2757,7 @@ export default function DashboardClient({
             <button className="modal-close" onClick={() => setProfileDialog(null)} aria-label={t("Close")}><Icon name="close" size={19} /></button>
             <div className="modal-icon"><Icon name={profileDialog === "reset" ? "trash" : profileDialog === "certificate" ? "certificate" : profileDialog === "logout" ? "logout" : profileDialog === "feedback" ? "message" : "sparkles"} size={25} /></div>
             {profileDialog === "edit" && <><span className="eyebrow">{t("MAKE IT YOURS")}</span><h2 id="profile-dialog-title">{t("Edit your profile.")}</h2><p>{t("Choose the name you want to see on your journey.")}</p><form onSubmit={(event) => { event.preventDefault(); const value = String(new FormData(event.currentTarget).get("name") ?? "").trim(); if (value) setProfileName(value); setProfileDialog(null); notify("Profile updated."); }}><label htmlFor="profile-name">{t("Display name")}</label><input id="profile-name" name="name" defaultValue={profileName} maxLength={32} required /><button className="primary-button submit-button" type="submit">{t("Save profile")} <Icon name="check" size={16} /></button></form></>}
-            {profileDialog === "reset" && <><span className="eyebrow">{t("A FRESH ORBIT")}</span><h2 id="profile-dialog-title">{t("Reset your journey?")}</h2><p>{t("This clears your saved challenges, stardust, and preferences on this device. This can’t be undone.")}</p><div className="profile-dialog-actions"><button className="outline-button" onClick={() => setProfileDialog(null)}>{t("Keep my progress")}</button><button className="profile-danger-button" onClick={resetJourney}>{t("Reset everything")}</button></div></>}
+            {profileDialog === "reset" && <><span className="eyebrow">{t("A FRESH ORBIT")}</span><h2 id="profile-dialog-title">{t("Reset your journey?")}</h2><p>{t("This clears your saved challenges, coins, and preferences on this device. This can’t be undone.")}</p><div className="profile-dialog-actions"><button className="outline-button" onClick={() => setProfileDialog(null)}>{t("Keep my progress")}</button><button className="profile-danger-button" onClick={resetJourney}>{t("Reset everything")}</button></div></>}
             {profileDialog === "certificate" && <><span className="eyebrow">{t("YOUR NEXT MILESTONE")}</span><h2 id="profile-dialog-title">{t("Your 40-day orbit awaits.")}</h2><p>{t("Reach Day 40 and complete all your daily challenges to unlock your certificate.")}</p><button className="primary-button submit-button" onClick={() => { setProfileDialog(null); setProfileOpen(false); setSelectedDay(40); document.getElementById("calendar")?.scrollIntoView({ behavior: "smooth" }); }}>{t("Go to day 40")} <Icon name="arrow" size={16} /></button></>}
             {profileDialog === "feedback" && <><span className="eyebrow">{t("HELP US GROW")}</span><h2 id="profile-dialog-title">{t("Send a little feedback.")}</h2><p>{t("What could make your next orbit even better?")}</p><form onSubmit={(event) => { event.preventDefault(); setProfileDialog(null); notify("Thanks for helping JOolo grow!"); }}><label htmlFor="feedback-message">{t("Your feedback")}</label><textarea id="feedback-message" name="feedback" rows={4} maxLength={500} placeholder={t("Share an idea or tell us how it’s going...")} required /><button className="primary-button submit-button" type="submit">{t("Send feedback")} <Icon name="arrow" size={16} /></button></form></>}
             {profileDialog === "logout" && <><span className="eyebrow">{t("YOUR ACCOUNT")}</span><h2 id="profile-dialog-title">{t("Ready to head out?")}</h2><p>{t("You’ll be securely signed out. Your journey progress will stay saved on this device.")}</p><button className="primary-button submit-button" onClick={logOut}>{t("Log out")} <Icon name="logout" size={16} /></button></>}
@@ -2913,37 +2903,37 @@ export default function DashboardClient({
           <div className="header-actions">{languageSelector}<button className="icon-button" onClick={openProfile} aria-label={t("Profile")}><Icon name="user" size={21} /></button></div>
         </header>
         <main className="leaderboard-content shell" aria-labelledby="leaderboard-title">
-          <div className="leaderboard-heading"><span className="eyebrow"><span className="eyebrow-line" /> {t("THE COSMIC COMMUNITY")}</span><h1 id="leaderboard-title">{t("Find your ")}<span>{t("orbit.")}</span></h1><p>{t("Every small step deserves a little stardust.")}</p></div>
+          <div className="leaderboard-heading"><span className="eyebrow"><span className="eyebrow-line" /> {t("THE COSMIC COMMUNITY")}</span><h1 id="leaderboard-title">{t("Find your ")}<span>{t("orbit.")}</span></h1><p>{t("Every small step deserves a few coins.")}</p></div>
           <div className="leaderboard-tabs" role="tablist" aria-label={t("Leaderboard period")}>
-            {(["daily", "weekly", "phase"] as const).map((period) => <button key={period} className={leaderboardPeriod === period ? "selected" : ""} role="tab" aria-selected={leaderboardPeriod === period} onClick={() => { setLeaderboardPeriod(period); setLeaderboardPage(0); }}>{t(period)}</button>)}
+            {(["daily", "weekly", "phase"] as const).map((period) => <button key={period} className={leaderboardPeriod === period ? "selected" : ""} role="tab" aria-selected={leaderboardPeriod === period} onClick={() => setLeaderboardPeriod(period)}>{t(period)}</button>)}
           </div>
           {leaderboardPeriod === "phase" ?           <section className="phase-progress-dashboard" aria-label={t("40-day progress dashboard")}>
             <div className="phase-progress-heading">
               <div>
                 <span className="eyebrow"><span className="eyebrow-line" /> {t("YOUR 40-DAY JOURNEY")}</span>
                 <h2>{t("Progress ")}<span>{t("in orbit.")}</span></h2>
-                <p>{t("Track your daily stardust and compare it with today’s Daily leaderboard leaders.")}</p>
+                <p>{t("Track your daily coins across your 40-day journey.")}</p>
               </div>
               <div className="phase-progress-stats">
-                <div><span>{t("STARDUST EARNED")}</span><strong>✦ {userTotalRecordedStardust.toLocaleString()}</strong></div>
+                <div><span>{t("COINS EARNED")}</span><strong>✦ {userTotalRecordedStardust.toLocaleString()}</strong></div>
                 <div><span>{t("DAY ")}{selectedDay} {t("SCORE")}</span><strong>✦ {(dailyStardustByDay[String(selectedDay)] ?? 0).toLocaleString()}</strong></div>
               </div>
             </div>
             <div className="progress-chart-panel">
               <div className="progress-chart-topline">
-                <div><span className="chart-kicker">{t("DAILY STARDUST")}</span><h3>{t("Day-by-day progress")}</h3></div>
-                <span className="chart-unit">{t("STARDUST / DAY")}</span>
+                <div><span className="chart-kicker">{t("DAILY COINS")}</span><h3>{t("Day-by-day progress")}</h3></div>
+                <span className="chart-unit">{t("COINS / DAY")}</span>
               </div>
               <div className="progress-chart-scroll">
                 <svg className="progress-chart" viewBox="0 0 930 345" role="img" aria-labelledby="progress-chart-title progress-chart-description">
-                  <title id="progress-chart-title">{t("Daily stardust progress over 40 challenge days")}</title>
-                  <desc id="progress-chart-description">{t("Your recorded daily stardust is shown with a cyan line. Gold, pink, and purple horizontal lines show current daily benchmark scores for the top three leaderboard players.")}</desc>
+                  <title id="progress-chart-title">{t("Daily coin progress over 40 challenge days")}</title>
+                  <desc id="progress-chart-description">{t("Your recorded daily coins are shown with a cyan line. Days without recorded progress are left blank.")}</desc>
                   {Array.from({ length: 6 }, (_, index) => {
                     const score = Math.round((chartYMax / 5) * (5 - index));
                     const y = chartBounds.top + (chartBounds.height / 5) * index;
                     return <g key={`y-${score}`}>
                       <line className="chart-grid-line" x1={chartBounds.left} x2={chartBounds.left + chartBounds.width} y1={y} y2={y} />
-                      <text className="chart-axis-label" x={chartBounds.left - 12} y={y + 4} textAnchor="end">{score.toLocaleString()}</text>
+                      <text className="chart-axis-label" x={chartBounds.left - 12} y={y + 4} textAnchor="end">{score.toLocaleString("id-ID")}</text>
                     </g>;
                   })}
                   {[1, 5, 10, 15, 20, 25, 30, 35, 40].map((day) => <g key={`x-${day}`}>
@@ -2952,34 +2942,35 @@ export default function DashboardClient({
                   </g>)}
                   <line className="chart-axis-line" x1={chartBounds.left} x2={chartBounds.left} y1={chartBounds.top} y2={chartBounds.top + chartBounds.height} />
                   <line className="chart-axis-line" x1={chartBounds.left} x2={chartBounds.left + chartBounds.width} y1={chartBounds.top + chartBounds.height} y2={chartBounds.top + chartBounds.height} />
-                  {dailyLeaders.map((leader, index) => {
-                    const colorClass = `leader-benchmark-${index + 1}`;
-                    const y = chartY(leader.totalCoin);
-                    return <g className={colorClass} key={leader.userId}>
-                      <line className="leader-benchmark-line" x1={chartBounds.left} x2={chartBounds.left + chartBounds.width} y1={y} y2={y} />
-                      <circle className="leader-benchmark-dot" cx={chartBounds.left + chartBounds.width} cy={y} r="4" />
-                    </g>;
-                  })}
                   {userTrendSegments.map((segment, index) => <polyline
                     className="user-progress-line"
                     key={`user-line-${index}`}
                     points={segment.map((point) => `${chartX(point.day)},${chartY(point.score)}`).join(" ")}
                   />)}
                   {userRecordedPoints.map((point) => <circle className="user-progress-point" key={`user-point-${point.day}`} cx={chartX(point.day)} cy={chartY(point.score)} r="5">
-                    <title>{`Day ${point.day}: ${point.score} stardust earned`}</title>
+                    <title>{`${t("Day ")}${point.day}: ${point.score.toLocaleString("id-ID")} ${t("coins earned")}`}</title>
                   </circle>)}
+                  {userRecordedPoints.map((point) => {
+                    const pointY = chartY(point.score);
+                    return <text
+                      className="user-progress-value"
+                      key={`user-value-${point.day}`}
+                      x={chartX(point.day)}
+                      y={pointY < chartBounds.top + 22 ? pointY + 19 : pointY - 10}
+                      textAnchor="middle"
+                    >
+                      {point.score.toLocaleString("id-ID")}
+                    </text>;
+                  })}
                 </svg>
               </div>
               <div className="chart-legend" aria-label={t("Chart lines")}>
-                <span className="chart-legend-item chart-user-legend"><i /> {t("You · daily stardust")}</span>
-                {dailyLeaders.map((leader, index) => <span className={`chart-legend-item chart-leader-legend leader-benchmark-${index + 1}`} key={leader.userId}>
-                  <i /> #{index + 1} {leader.displayName} · {leader.totalCoin.toLocaleString()} {t("benchmark")}
-                </span>)}
+                <span className="chart-legend-item chart-user-legend"><i /> {t("You · daily coins")}</span>
               </div>
-              <p className="chart-data-note">{t("Your line records stardust from challenges you complete from now on; unrecorded days are left blank. Leader lines are today’s Daily scores used as comparison benchmarks, not historical records.")}</p>
+              <p className="chart-data-note">{t("Your line shows the coins you earned each day. Days without recorded progress are left blank.")}</p>
             </div>
           </section> : <>
-            <p className="leaderboard-period-note">{t(leaderboardPeriod === "daily" ? "Daily coin totals for the current day in WIB." : "Weekly coin totals for the last 7 days.")}</p>
+            <p className="leaderboard-period-note">{t(leaderboardPeriod === "daily" ? "Daily coin totals for today's challenge day in WIB." : "Weekly coin totals for the last 7 days.")}</p>
             {leaderboardLoading
               ? <p className="leaderboard-state" role="status">{t("Loading leaderboard...")}</p>
               : leaderboardError
@@ -2987,7 +2978,7 @@ export default function DashboardClient({
                 : rankedLeaderboard.length === 0
                   ? <p className="leaderboard-state">{t("No coins earned in this period yet.")}</p>
                   : <>
-                    <p className="leaderboard-top-ten-note">{t("Top 100 members by total coins earned.")}</p>
+                    <p className="leaderboard-top-ten-note">{t("Top 10 members by total coins earned.")}</p>
                     {topLeaders.length === 3 && <section className="podium" aria-label={t("Top three players")}>
                       {[{ leader: topLeaders[1], rank: 2 }, { leader: topLeaders[0], rank: 1 }, { leader: topLeaders[2], rank: 3 }].map(({ leader, rank }) => (
                         <article className={`podium-player podium-${rank}`} key={leader.userId}>
@@ -2999,7 +2990,7 @@ export default function DashboardClient({
                       ))}
                     </section>}
                     <section className="leader-list" aria-label={t("Leaderboard ranks")}>
-                      {(topLeaders.length < 3 ? topLeaders : pageLeaders).map((leader) => {
+                      {(topLeaders.length < 3 ? topLeaders : remainingTopTenLeaders).map((leader) => {
                         const isYou = leader.userId === userId;
                         return <article className={`leader-list-row ${isYou ? "you" : ""}`} key={leader.userId}>
                           <span className="list-rank">{leader.rank}</span>
@@ -3009,11 +3000,6 @@ export default function DashboardClient({
                         </article>;
                       })}
                     </section>
-                    {leaderboardPageCount > 1 && <nav className="leaderboard-pagination" aria-label={t("Leaderboard pagination")}>
-                      <span>{t("Showing ranks ")}{4 + visibleLeaderboardPage * pageSize}–{Math.min(3 + (visibleLeaderboardPage + 1) * pageSize, rankedLeaderboard.length)}{t(" of ")}{rankedLeaderboard.length}</span>
-                      <button className="page-button previous" type="button" disabled={visibleLeaderboardPage === 0} aria-label={t("Previous leaderboard page")} onClick={() => setLeaderboardPage((page) => Math.max(0, page - 1))}><Icon name="chevron" size={15} />{t("PREVIOUS")}</button>
-                      <button className="page-button" type="button" disabled={visibleLeaderboardPage >= leaderboardPageCount - 1} aria-label={t("Next leaderboard page")} onClick={() => setLeaderboardPage((page) => Math.min(leaderboardPageCount - 1, page + 1))}>{t("NEXT")}<Icon name="chevron" size={15} /></button>
-                    </nav>}
                   </>}
           </>}
         </main>
