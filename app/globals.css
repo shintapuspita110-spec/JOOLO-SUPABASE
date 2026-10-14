@@ -239,6 +239,7 @@ h1,h2,h3,p{margin-top:0}.hero-intro h1{font:800 clamp(36px,4.4vw,58px)/1.13 Manr
 .profile-version span{color:#9aa7b8;font-weight:500}
 .profile-version i{margin-left:4px;color:var(--cyan);font-style:normal}
 .profile-dialog-backdrop{z-index:8}
+.life-reset-backdrop{z-index:20}.life-reset-dialog{width:min(560px,100%)}
 .profile-dialog .profile-dialog-actions{display:flex;gap:9px;margin-top:16px}
 .profile-dialog-actions>*{flex:1;justify-content:center;min-height:39px;margin:0;font-size:9px}
 .profile-danger-button{border:1px solid rgba(248,126,124,.44);border-radius:9px;background:rgba(176,53,58,.17);color:#ffb2a9;font-size:10px;font-weight:700;cursor:pointer}

@@ -151,7 +151,7 @@ select
     when dates.day_offset = 0 then now()
     else (dates.earned_on + time '12:00') at time zone 'Asia/Jakarta'
   end,
-  200 + 10 * mod(users.user_number * 17 + dates.day_offset * 29, 26)
+  140 + 10 * mod(users.user_number * 17 + dates.day_offset * 29, 15)
 from generate_series(1, 100) as users(user_number)
 cross join generate_series(0, 6) as day_offsets(day_offset)
 cross join lateral (
@@ -160,32 +160,30 @@ cross join lateral (
     day_offsets.day_offset
 ) as dates
 on conflict (user_id, earned_on) do update
-  set earned_coin = excluded.earned_coin;
+  set earned_at = excluded.earned_at,
+      earned_coin = excluded.earned_coin;
 
 update public.coin_leaderboard_test_events
-  set earned_coin = earned_coin - mod(earned_coin, 10)
-  where mod(earned_coin, 10) <> 0;
-
-update public.coin_leaderboard_test_score_overrides
-  set daily_coin = daily_coin - mod(daily_coin, 10),
-      weekly_coin = weekly_coin - mod(weekly_coin, 10)
-  where mod(daily_coin, 10) <> 0 or mod(weekly_coin, 10) <> 0;
+  set earned_coin = 140 + 10 * mod(abs(hashtext(user_id::text || ':' || earned_on::text)::bigint), 15)
+  where earned_coin not between 140 and 280 or mod(earned_coin, 10) <> 0;
 
 insert into public.coin_leaderboard_test_score_overrides (user_id, daily_coin, weekly_coin)
 select
   profile.user_id,
   coalesce(sum(event.earned_coin) filter (
-    where event.earned_at >= date_trunc('day', now() at time zone 'Asia/Jakarta') at time zone 'Asia/Jakarta'
-      and event.earned_at < now()
-  ), 0)::integer,
+    where event.earned_on = (now() at time zone 'Asia/Jakarta')::date
+  ), 140 + 10 * mod(abs(hashtext(profile.user_id::text)::bigint), 15))::integer,
   coalesce(sum(event.earned_coin) filter (
-    where event.earned_at >= now() - interval '7 days'
-      and event.earned_at < now()
-  ), 0)::integer
+    where event.earned_on between (now() at time zone 'Asia/Jakarta')::date - 6
+      and (now() at time zone 'Asia/Jakarta')::date
+  ), (140 + 10 * mod(abs(hashtext(profile.user_id::text)::bigint), 15)) * 7)::integer
 from public.coin_leaderboard_test_profiles as profile
 left join public.coin_leaderboard_test_events as event on event.user_id = profile.user_id
 group by profile.user_id
-on conflict (user_id) do nothing;
+on conflict (user_id) do update
+  set daily_coin = excluded.daily_coin,
+      weekly_coin = excluded.weekly_coin,
+      updated_at = now();
 
 commit;
 
@@ -195,8 +193,8 @@ select
   (select count(*) from public.coin_leaderboard_test_events) as saved_test_coin_event_count,
   (select min(earned_coin) from public.coin_leaderboard_test_events) as min_saved_daily_coin,
   (select max(earned_coin) from public.coin_leaderboard_test_events) as max_saved_daily_coin,
-  (select count(*) from public.coin_leaderboard_test_events where mod(earned_coin, 10) <> 0) as invalid_test_event_coin_count,
-  (select count(*) from public.coin_leaderboard_test_score_overrides where mod(daily_coin, 10) <> 0 or mod(weekly_coin, 10) <> 0) as invalid_test_override_coin_count,
+  (select count(*) from public.coin_leaderboard_test_events where earned_coin not between 140 and 280 or mod(earned_coin, 10) <> 0) as invalid_test_event_coin_count,
+  (select count(*) from public.coin_leaderboard_test_score_overrides where daily_coin not between 140 and 280 or weekly_coin not between 980 and 1960 or mod(daily_coin, 10) <> 0 or mod(weekly_coin, 10) <> 0) as invalid_test_override_coin_count,
   (
     select count(*)
       from public.coin_leaderboard_test_events

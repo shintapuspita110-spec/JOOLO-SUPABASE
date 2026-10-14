@@ -27,8 +27,8 @@ const newCoinTestUserDraft: CoinTestUserDraft = {
   userId: "",
   displayName: "",
   gender: "woman",
-  dailyCoin: "0",
-  weeklyCoin: "0",
+  dailyCoin: "140",
+  weeklyCoin: "980",
 };
 
 export default function AdminClient({
@@ -105,15 +105,15 @@ export default function AdminClient({
     if (
       !coinTestUserDraft.displayName.trim()
       || !Number.isSafeInteger(dailyCoin)
-      || dailyCoin < 0
-      || dailyCoin > 10_000_000
+      ||       dailyCoin < 140
+      || dailyCoin > 280
       || dailyCoin % 10 !== 0
       || !Number.isSafeInteger(weeklyCoin)
-      || weeklyCoin < 0
-      || weeklyCoin > 10_000_000
+      || weeklyCoin < 980
+      || weeklyCoin > 1_960
       || weeklyCoin % 10 !== 0
     ) {
-      setCoinTestUsersError("Isi nama dan jumlah koin kelipatan 10 antara 0 dan 10.000.000.");
+      setCoinTestUsersError("Daily coins harus 140–280 dan weekly coins 980–1.960, kelipatan 10.");
       return;
     }
 
@@ -391,8 +391,8 @@ export default function AdminClient({
                 <input
                   id="coin-test-daily"
                   type="number"
-                  min={0}
-                  max={10_000_000}
+                  min={140}
+                  max={280}
                   step={10}
                   required
                   value={coinTestUserDraft.dailyCoin}
@@ -407,8 +407,8 @@ export default function AdminClient({
                 <input
                   id="coin-test-weekly"
                   type="number"
-                  min={0}
-                  max={10_000_000}
+                  min={980}
+                  max={1_960}
                   step={10}
                   required
                   value={coinTestUserDraft.weeklyCoin}

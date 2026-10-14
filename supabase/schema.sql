@@ -1391,54 +1391,57 @@ create table if not exists public.coin_leaderboard_test_events (
   user_id uuid not null references public.coin_leaderboard_test_profiles (user_id) on delete cascade,
   earned_on date not null,
   earned_at timestamptz not null,
-  earned_coin integer not null check (earned_coin between 200 and 450 and mod(earned_coin, 10) = 0),
+  earned_coin integer not null check (earned_coin between 140 and 280 and mod(earned_coin, 10) = 0),
   primary key (user_id, earned_on)
 );
 
 create table if not exists public.coin_leaderboard_test_score_overrides (
   user_id uuid primary key references public.coin_leaderboard_test_profiles (user_id) on delete cascade,
-  daily_coin integer not null default 0 check (daily_coin between 0 and 10000000 and mod(daily_coin, 10) = 0),
-  weekly_coin integer not null default 0 check (weekly_coin between 0 and 10000000 and mod(weekly_coin, 10) = 0),
+  daily_coin integer not null default 140 check (daily_coin between 140 and 280 and mod(daily_coin, 10) = 0),
+  weekly_coin integer not null default 980 check (weekly_coin between 980 and 1960 and mod(weekly_coin, 10) = 0),
   updated_at timestamptz not null default now()
 );
 
+alter table public.coin_leaderboard_test_events
+  drop constraint if exists coin_leaderboard_test_events_earned_coin_check;
+
 update public.coin_leaderboard_test_events
-  set earned_coin = earned_coin - mod(earned_coin, 10)
-  where mod(earned_coin, 10) <> 0;
+  set earned_coin = 140 + 10 * mod(abs(hashtext(user_id::text || ':' || earned_on::text)::bigint), 15)
+  where earned_coin not between 140 and 280 or mod(earned_coin, 10) <> 0;
 
 alter table public.coin_leaderboard_test_events
-  drop constraint if exists coin_leaderboard_test_events_earned_coin_check,
   add constraint coin_leaderboard_test_events_earned_coin_check
-    check (earned_coin between 200 and 450 and mod(earned_coin, 10) = 0);
+    check (earned_coin between 140 and 280 and mod(earned_coin, 10) = 0);
 
 update public.coin_leaderboard_test_score_overrides
-  set daily_coin = daily_coin - mod(daily_coin, 10),
-      weekly_coin = weekly_coin - mod(weekly_coin, 10)
-  where mod(daily_coin, 10) <> 0 or mod(weekly_coin, 10) <> 0;
+  set daily_coin = least(280, greatest(140, daily_coin - mod(daily_coin, 10))),
+      weekly_coin = least(1960, greatest(980, weekly_coin - mod(weekly_coin, 10)));
 
 alter table public.coin_leaderboard_test_score_overrides
   drop constraint if exists coin_leaderboard_test_score_overrides_daily_coin_check,
   add constraint coin_leaderboard_test_score_overrides_daily_coin_check
-    check (daily_coin between 0 and 10000000 and mod(daily_coin, 10) = 0),
+    check (daily_coin between 140 and 280 and mod(daily_coin, 10) = 0),
   drop constraint if exists coin_leaderboard_test_score_overrides_weekly_coin_check,
   add constraint coin_leaderboard_test_score_overrides_weekly_coin_check
-    check (weekly_coin between 0 and 10000000 and mod(weekly_coin, 10) = 0);
+    check (weekly_coin between 980 and 1960 and mod(weekly_coin, 10) = 0);
 
 insert into public.coin_leaderboard_test_score_overrides (user_id, daily_coin, weekly_coin)
 select
   test_profile.user_id,
   coalesce(sum(event.earned_coin) filter (
-    where event.earned_at >= date_trunc('day', now() at time zone 'Asia/Jakarta') at time zone 'Asia/Jakarta'
-      and event.earned_at < now()
-  ), 0)::integer,
+    where event.earned_on = (now() at time zone 'Asia/Jakarta')::date
+  ), 140 + 10 * mod(abs(hashtext(test_profile.user_id::text)::bigint), 15))::integer,
   coalesce(sum(event.earned_coin) filter (
-    where event.earned_at >= now() - interval '7 days'
-      and event.earned_at < now()
-  ), 0)::integer
+    where event.earned_on between (now() at time zone 'Asia/Jakarta')::date - 6
+      and (now() at time zone 'Asia/Jakarta')::date
+  ), (140 + 10 * mod(abs(hashtext(test_profile.user_id::text)::bigint), 15)) * 7)::integer
 from public.coin_leaderboard_test_profiles as test_profile
 left join public.coin_leaderboard_test_events as event on event.user_id = test_profile.user_id
 group by test_profile.user_id
-on conflict (user_id) do nothing;
+on conflict (user_id) do update
+  set daily_coin = excluded.daily_coin,
+      weekly_coin = excluded.weekly_coin,
+      updated_at = now();
 
 alter table public.coin_leaderboard_test_profiles enable row level security;
 alter table public.coin_leaderboard_test_events enable row level security;
@@ -1507,9 +1510,9 @@ begin
   if p_gender is null or p_gender not in ('woman', 'man') then
     raise exception 'Gender must be woman or man';
   end if;
-  if p_daily_coin is null or p_daily_coin not between 0 and 10000000 or mod(p_daily_coin, 10) <> 0
-    or p_weekly_coin is null or p_weekly_coin not between 0 and 10000000 or mod(p_weekly_coin, 10) <> 0 then
-    raise exception 'Daily and weekly coins must be multiples of 10 between 0 and 10000000';
+  if p_daily_coin is null or p_daily_coin not between 140 and 280 or mod(p_daily_coin, 10) <> 0
+    or p_weekly_coin is null or p_weekly_coin not between 980 and 1960 or mod(p_weekly_coin, 10) <> 0 then
+    raise exception 'Daily coins must be 140–280 and weekly coins 980–1960, in multiples of 10';
   end if;
 
   selected_avatar := case
@@ -1646,7 +1649,7 @@ begin
       select
         test_profile.user_id,
         (
-          200 + 10 * mod(abs(hashtext(test_profile.user_id::text || ':' || dates.event_day::date::text)::bigint), 26)
+          140 + 10 * mod(abs(hashtext(test_profile.user_id::text || ':' || dates.event_day::date::text)::bigint), 15)
         )::bigint as earned_coin,
         true as is_test_data
         from public.coin_leaderboard_test_profiles as test_profile

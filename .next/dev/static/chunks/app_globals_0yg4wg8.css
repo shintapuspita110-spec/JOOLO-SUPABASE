@@ -3961,6 +3961,14 @@ h1, h2, h3, p {
   z-index: 8;
 }
 
+.life-reset-backdrop {
+  z-index: 20;
+}
+
+.life-reset-dialog {
+  width: min(560px, 100%);
+}
+
 .profile-dialog .profile-dialog-actions {
   gap: 9px;
   margin-top: 16px;

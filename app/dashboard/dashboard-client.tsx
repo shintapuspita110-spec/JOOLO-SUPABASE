@@ -294,6 +294,9 @@ const indonesianTranslations: Record<string, string> = {
   "TOTAL COIN": "TOTAL KOIN",
   "TOTAL LIVES": "TOTAL NYAWA",
   "No completed challenge in a day costs 1 life. At 0, 250 coins automatically restore 1 life; without enough coins, your challenge data resets.": "Tidak menyelesaikan tantangan dalam sehari mengurangi 1 nyawa. Saat nyawa habis, 250 koin otomatis ditukar dengan 1 nyawa; jika koin tidak cukup, data tantangan akan diatur ulang.",
+  "Your challenge restarted": "Tantangan Anda dimulai ulang",
+  "Your challenge data was reset automatically because missed challenge days used up all 7 lives. You had fewer than 250 coins, so the system could not exchange coins for an extra life. Your saved Phase and custom-challenge progress was cleared, your coin balance is now 0, and a new 40-day challenge started today with 7 lives.": "Data tantangan diatur ulang otomatis karena hari-hari tanpa tantangan selesai menghabiskan semua 7 nyawa. Koin Anda kurang dari 250, sehingga sistem tidak dapat menukarkan koin untuk menambah nyawa. Progres Phase dan tantangan kustom yang tersimpan telah dihapus, saldo koin menjadi 0, dan tantangan 40 hari baru dimulai hari ini dengan 7 nyawa.",
+  "OK, I understand": "OK, mengerti",
   "CHALLENGE START": "TANTANGAN DIMULAI",
   "Change challenge start date, currently": "Ubah tanggal mulai tantangan, saat ini",
   "THE 40-DAY CHALLENGE": "TANTANGAN 40 HARI",
@@ -874,6 +877,7 @@ export default function DashboardClient({
   const [dailyLeaderboardRank, setDailyLeaderboardRank] = useState(0);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [leaderboardError, setLeaderboardError] = useState("");
+  const [lifeResetNoticeOpen, setLifeResetNoticeOpen] = useState(false);
   const [language, setLanguage] = useState<Language>("en");
   const [toast, setToast] = useState("");
   const [hydrated, setHydrated] = useState(false);
@@ -1042,7 +1046,7 @@ export default function DashboardClient({
             "joolo-challenge-completion-days",
             "joolo-coins",
           ].forEach((key) => localStorage.removeItem(`${userId}:${key}`));
-          notify("All challenge data was reset because your lives ran out. Your challenge restarts today.");
+          setLifeResetNoticeOpen(true);
           router.refresh();
           return;
         }
@@ -1134,15 +1138,34 @@ export default function DashboardClient({
   const topTenLeaders = rankedLeaderboard.slice(0, 10);
   const topLeaders = topTenLeaders.slice(0, 3);
   const remainingTopTenLeaders = topTenLeaders.slice(3);
+  const phaseCoinsByDay = useMemo(() => {
+    const questDays = new Map(phaseDailyQuests.map((quest) => [quest.id, quest.day_number]));
+    const phaseTotals = Object.values(phaseQuestProgressById).reduce<Record<string, number>>((totals, progress) => {
+      const day = questDays.get(progress.quest_id);
+      if (day !== undefined && progress.completed_at !== null && progress.earned_coin > 0) {
+        const dayKey = String(day);
+        totals[dayKey] = (totals[dayKey] ?? 0) + progress.earned_coin;
+      }
+      return totals;
+    }, {});
+    return userDailyQuests.reduce((totals, quest) => {
+      if (quest.is_completed && quest.earned_coin > 0) {
+        const day = challengeCompletionDays[quest.id] ?? quest.start_date;
+        const dayKey = String(day);
+        totals[dayKey] = (totals[dayKey] ?? 0) + quest.earned_coin;
+      }
+      return totals;
+    }, phaseTotals);
+  }, [challengeCompletionDays, phaseDailyQuests, phaseQuestProgressById, userDailyQuests]);
   const chartBounds = { left: 72, top: 20, width: 820, height: 270 };
-  const chartMaxValue = Math.max(0, ...Object.values(dailyStardustByDay));
+  const chartMaxValue = Math.max(0, ...Object.values(phaseCoinsByDay));
   const chartYMax = chartMaxValue > 500 ? 1000 : 500;
   const chartX = (day: number) => chartBounds.left + ((day - 1) / 39) * chartBounds.width;
   const chartY = (score: number) => chartBounds.top + chartBounds.height - (score / chartYMax) * chartBounds.height;
   const userRecordedPoints = Array.from({ length: 40 }, (_, index) => ({
     day: index + 1,
-    score: dailyStardustByDay[String(index + 1)],
-  })).filter((point): point is { day: number; score: number } => typeof point.score === "number");
+    score: phaseCoinsByDay[String(index + 1)],
+  })).filter((point): point is { day: number; score: number } => typeof point.score === "number" && point.score > 0);
   const userTrendSegments: Array<Array<{ day: number; score: number }>> = [];
   userRecordedPoints.forEach((point) => {
     const lastSegment = userTrendSegments[userTrendSegments.length - 1];
@@ -1152,7 +1175,7 @@ export default function DashboardClient({
       userTrendSegments.push([point]);
     }
   });
-  const userTotalRecordedStardust = Object.values(dailyStardustByDay).reduce((total, score) => total + score, 0);
+  const userTotalRecordedStardust = Object.values(phaseCoinsByDay).reduce((total, score) => total + score, 0);
   const visibleBonusResources = bonusResources[bonusType].filter((resource) =>
     `${resource.title} ${resource.category} ${resource.description}`.toLowerCase().includes(bonusSearch.trim().toLowerCase()),
   );
@@ -2916,7 +2939,7 @@ export default function DashboardClient({
               </div>
               <div className="phase-progress-stats">
                 <div><span>{t("COINS EARNED")}</span><strong>✦ {userTotalRecordedStardust.toLocaleString()}</strong></div>
-                <div><span>{t("DAY ")}{selectedDay} {t("SCORE")}</span><strong>✦ {(dailyStardustByDay[String(selectedDay)] ?? 0).toLocaleString()}</strong></div>
+                <div><span>{t("DAY ")}{selectedDay} {t("SCORE")}</span><strong>✦ {(phaseCoinsByDay[String(selectedDay)] ?? 0).toLocaleString()}</strong></div>
               </div>
             </div>
             <div className="progress-chart-panel">
@@ -3027,6 +3050,15 @@ export default function DashboardClient({
               <button className="primary-button" type="submit" disabled={journeyDateSaving}>{journeyDateSaving ? t("Saving...") : t("Save start date")} <Icon name="check" size={16} /></button>
             </div>
           </form>
+        </section>
+      </div>}
+      {lifeResetNoticeOpen && <div className="modal-backdrop life-reset-backdrop" role="presentation">
+        <section className="modal glass-panel life-reset-dialog" role="alertdialog" aria-modal="true" aria-labelledby="life-reset-title" aria-describedby="life-reset-message">
+          <div className="modal-icon"><Icon name="sparkles" size={25} /></div>
+          <span className="eyebrow">{t("YOUR 40-DAY CHALLENGE")}</span>
+          <h2 id="life-reset-title">{t("Your challenge restarted")}</h2>
+          <p id="life-reset-message">{t("Your challenge data was reset automatically because missed challenge days used up all 7 lives. You had fewer than 250 coins, so the system could not exchange coins for an extra life. Your saved Phase and custom-challenge progress was cleared, your coin balance is now 0, and a new 40-day challenge started today with 7 lives.")}</p>
+          <button className="primary-button submit-button" type="button" autoFocus onClick={() => setLifeResetNoticeOpen(false)}>{t("OK, I understand")} <Icon name="check" size={16} /></button>
         </section>
       </div>}
       {toast && <div className="toast" role="status"><span>✦</span>{toast}</div>}
