@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import type { UploadedBonusResource, BonusType } from "@/lib/bonus";
 
@@ -312,8 +313,7 @@ export default function AdminClient({
       <div className="nebula nebula-right" />
       <header className="topbar shell admin-topbar">
         <a href="/dashboard" className="brand" aria-label="Kembali ke dashboard">
-          <span className="brand-mark">✦</span>
-          <span>JO<span className="brand-muted">O</span>LO<span className="brand-dot">.</span></span>
+          <Image className="brand-logo" src="/joolo-logo.png" width={566} height={161} alt="" />
         </a>
         <a className="admin-back-link" href="/dashboard">Kembali ke dashboard</a>
       </header>

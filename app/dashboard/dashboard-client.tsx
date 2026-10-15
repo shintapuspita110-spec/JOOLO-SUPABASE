@@ -2545,7 +2545,7 @@ export default function DashboardClient({
       <div className="stars stars-one" /><div className="stars stars-two" />
       <div className="nebula nebula-left" /><div className="nebula nebula-right" />
       <header className="topbar shell">
-        <a href="#top" className="brand" aria-label={t("JOOLO home")}><span className="brand-mark">✦</span><span>JO<span className="brand-muted">O</span>LO<span className="brand-dot">.</span></span></a>
+        <a href="#top" className="brand" aria-label={t("JOOLO home")}><Image className="brand-logo" src="/joolo-logo.png" width={566} height={161} alt="" /></a>
         <nav className="main-nav" aria-label={t("Main navigation")}>
           <button className="nav-link" onClick={() => setLeaderboardOpen(true)}>{t("Leaderboard")}</button>
           <a className={`nav-link ${bonusOpen ? "" : "active"}`} href="#calendar" onClick={() => setBonusOpen(false)}>{t("Challenge")}</a>
@@ -2712,7 +2712,7 @@ export default function DashboardClient({
           </div>}
         </section>
 
-        <footer className="footer"><a href="#top" className="footer-brand">✦ JOOLO<span>.</span></a><span>{t("Made for your becoming")} <i>✧</i> 2026</span><a href="#top">{t("Back to the stars ↑")}</a></footer>
+        <footer className="footer"><a href="#top" className="footer-brand" aria-label={t("JOOLO home")}><Image src="/joolo-logo.png" width={566} height={161} alt="" /></a><span>{t("Made for your becoming")} <i>✧</i> 2026</span><a href="#top">{t("Back to the stars ↑")}</a></footer>
       </div>
 
       {modalOpen && <div className="create-task-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeTaskCreator(); }}>
@@ -3107,7 +3107,7 @@ export default function DashboardClient({
       {bonusOpen && <div className="bonus-screen">
         <div className="stars stars-one" /><div className="stars stars-two" />
         <header className="topbar shell bonus-topbar">
-          <a href="#top" className="brand" onClick={(event) => { event.preventDefault(); setBonusOpen(false); }} aria-label={t("JOOLO home")}><span className="brand-mark">✦</span><span>JO<span className="brand-muted">O</span>LO<span className="brand-dot">.</span></span></a>
+          <a href="#top" className="brand" onClick={(event) => { event.preventDefault(); setBonusOpen(false); }} aria-label={t("JOOLO home")}><Image className="brand-logo" src="/joolo-logo.png" width={566} height={161} alt="" /></a>
           <nav className="main-nav" aria-label={t("Main navigation")}>
             <button className="nav-link" onClick={() => { setBonusOpen(false); setLeaderboardOpen(true); }}>{t("Leaderboard")}</button>
             <button className="nav-link" onClick={() => { setBonusOpen(false); jumpToChallenges(); }}>{t("Challenge")}</button>
@@ -3132,7 +3132,7 @@ export default function DashboardClient({
             {visibleUploadedResources.map((resource) => <article className={`bonus-resource-card ${bonusType === "ebook" ? "ebook-resource-card" : ""}`} key={resource.id}>
               <div className={`bonus-cover ${bonusType}`}>
                 <BonusCoverImage key={resource.image_url} imageUrl={resource.image_url} />
-                <span className="bonus-cover-brand">✦ JOOLO</span>
+                <Image className="bonus-cover-brand" src="/joolo-logo.png" width={566} height={161} alt="" />
               </div>
               <div className="bonus-resource-info">
                 <span className="bonus-category">{t(bonusType === "ebook" ? "E-BOOK" : "TRACKER")}</span>
@@ -3153,7 +3153,7 @@ export default function DashboardClient({
       {leaderboardOpen && <div className="leaderboard-screen">
         <div className="stars stars-one" /><div className="stars stars-two" />
         <header className="topbar shell leaderboard-topbar">
-          <a href="#top" className="brand" onClick={(event) => { event.preventDefault(); setLeaderboardOpen(false); }} aria-label={t("JOOLO home")}><span className="brand-mark">✦</span><span>JO<span className="brand-muted">O</span>LO<span className="brand-dot">.</span></span></a>
+          <a href="#top" className="brand" onClick={(event) => { event.preventDefault(); setLeaderboardOpen(false); }} aria-label={t("JOOLO home")}><Image className="brand-logo" src="/joolo-logo.png" width={566} height={161} alt="" /></a>
           <nav className="main-nav" aria-label={t("Main navigation")}>
             <button className="nav-link active leaderboard-nav-active" onClick={() => setLeaderboardOpen(false)}>{t("Leaderboard")}</button>
             <button className="nav-link" onClick={() => { setLeaderboardOpen(false); jumpToChallenges(); }}>{t("Challenge")}</button>

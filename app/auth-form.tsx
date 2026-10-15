@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
@@ -124,8 +124,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
       <div className="nebula nebula-right" />
       <section className="login-card" aria-labelledby="auth-title">
         <Link href="/" className="brand login-brand" aria-label="JOOLO">
-          <span className="brand-mark">✦</span>
-          <span>JO<span className="brand-muted">O</span>LO<span className="brand-dot">.</span></span>
+          <Image className="brand-logo" src="/joolo-logo.png" width={566} height={161} alt="" />
         </Link>
         <div className="login-orbit" aria-hidden="true"><span>✦</span><i /></div>
         <div className="eyebrow login-eyebrow"><span className="eyebrow-line" /> YOUR NEXT CHAPTER STARTS HERE</div>

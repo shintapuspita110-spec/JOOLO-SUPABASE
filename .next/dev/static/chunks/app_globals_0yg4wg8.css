@@ -113,13 +113,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 
 .brand {
-  letter-spacing: -1.1px;
+  flex: none;
   align-items: center;
-  gap: 10px;
-  font-family: Manrope, sans-serif;
-  font-size: 22px;
-  font-weight: 800;
   display: flex;
+}
+
+.brand-logo {
+  width: 120px;
+  height: auto;
+  display: block;
 }
 
 .brand-mark {
@@ -1639,16 +1641,14 @@ h1, h2, h3, p {
 }
 
 .footer-brand {
-  color: #cfdeeb;
-  font: 800 15px Manrope, sans-serif;
+  align-items: center;
+  display: inline-flex;
 }
 
-.footer-brand:first-letter {
-  color: var(--cyan);
-}
-
-.footer-brand span {
-  color: var(--pink);
+.footer-brand img {
+  width: 90px;
+  height: auto;
+  display: block;
 }
 
 .footer > span {
@@ -1948,12 +1948,8 @@ h1, h2, h3, p {
     padding: 0 13px;
   }
 
-  .brand {
-    font-size: 19px;
-  }
-
-  .brand-mark {
-    font-size: 23px;
+  .brand-logo {
+    width: 100px;
   }
 
   .main-nav {
@@ -2335,8 +2331,8 @@ h1, h2, h3, p {
     font-size: 8px;
   }
 
-  .footer-brand {
-    font-size: 13px;
+  .footer-brand img {
+    width: 76px;
   }
 }
 
@@ -2349,9 +2345,8 @@ h1, h2, h3, p {
     font-size: 9px;
   }
 
-  .brand {
-    gap: 6px;
-    font-size: 17px;
+  .brand-logo {
+    width: 88px;
   }
 
   .overview-cards {
@@ -3233,12 +3228,11 @@ h1, h2, h3, p {
 }
 
 .bonus-cover-brand {
-  color: #dcf7f4;
-  letter-spacing: 1.1px;
-  text-shadow: 0 1px 6px #06101e;
-  font: 800 8px Manrope, sans-serif;
-  top: 11px;
-  left: 12px;
+  filter: drop-shadow(0 1px 4px #0000008c);
+  width: 64px;
+  height: auto;
+  top: 8px;
+  left: 9px;
 }
 
 .bonus-resource-info {
@@ -5579,12 +5573,11 @@ h1, h2, h3, p {
 
 .login-brand {
   z-index: 1;
-  font-size: 19px;
   position: relative;
 }
 
-.login-brand .brand-mark {
-  font-size: 23px;
+.login-brand .brand-logo {
+  width: 112px;
 }
 
 .login-orbit {
@@ -7673,8 +7666,10 @@ body.dashboard-light {
   box-shadow: 0 9px 28px #1f395414, inset 0 1px #ffffffe6;
 }
 
-.dashboard-light .brand-muted {
-  color: #66849a;
+.dashboard-light .brand-logo, .dashboard-light .footer-brand img {
+  background: #07101e;
+  border-radius: 5px;
+  padding: 2px 4px;
 }
 
 .dashboard-light .nav-link {
