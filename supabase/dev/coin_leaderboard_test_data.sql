@@ -194,7 +194,7 @@ select
   (select min(earned_coin) from public.coin_leaderboard_test_events) as min_saved_daily_coin,
   (select max(earned_coin) from public.coin_leaderboard_test_events) as max_saved_daily_coin,
   (select count(*) from public.coin_leaderboard_test_events where earned_coin not between 140 and 280 or mod(earned_coin, 10) <> 0) as invalid_test_event_coin_count,
-  (select count(*) from public.coin_leaderboard_test_score_overrides where daily_coin not between 140 and 280 or weekly_coin not between 980 and 1960 or mod(daily_coin, 10) <> 0 or mod(weekly_coin, 10) <> 0) as invalid_test_override_coin_count,
+  (select count(*) from public.coin_leaderboard_test_score_overrides where daily_coin < 140 or weekly_coin < 980 or mod(daily_coin, 10) <> 0 or mod(weekly_coin, 10) <> 0) as invalid_test_override_coin_count,
   (
     select count(*)
       from public.coin_leaderboard_test_events

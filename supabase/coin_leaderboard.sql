@@ -25,8 +25,8 @@ create table if not exists public.coin_leaderboard_test_events (
 
 create table if not exists public.coin_leaderboard_test_score_overrides (
   user_id uuid primary key references public.coin_leaderboard_test_profiles (user_id) on delete cascade,
-  daily_coin integer not null default 140 check (daily_coin between 140 and 280 and mod(daily_coin, 10) = 0),
-  weekly_coin integer not null default 980 check (weekly_coin between 980 and 1960 and mod(weekly_coin, 10) = 0),
+  daily_coin bigint not null default 140 check (daily_coin >= 140 and mod(daily_coin, 10) = 0),
+  weekly_coin bigint not null default 980 check (weekly_coin >= 980 and mod(weekly_coin, 10) = 0),
   updated_at timestamptz not null default now()
 );
 
@@ -42,16 +42,20 @@ alter table public.coin_leaderboard_test_events
     check (earned_coin between 140 and 280 and mod(earned_coin, 10) = 0);
 
 update public.coin_leaderboard_test_score_overrides
-  set daily_coin = least(280, greatest(140, daily_coin - mod(daily_coin, 10))),
-      weekly_coin = least(1960, greatest(980, weekly_coin - mod(weekly_coin, 10)));
+  set daily_coin = greatest(140, daily_coin - mod(daily_coin, 10)),
+      weekly_coin = greatest(980, weekly_coin - mod(weekly_coin, 10));
 
 alter table public.coin_leaderboard_test_score_overrides
   drop constraint if exists coin_leaderboard_test_score_overrides_daily_coin_check,
+  drop constraint if exists coin_leaderboard_test_score_overrides_weekly_coin_check;
+
+alter table public.coin_leaderboard_test_score_overrides
+  alter column daily_coin type bigint using daily_coin::bigint,
+  alter column weekly_coin type bigint using weekly_coin::bigint,
   add constraint coin_leaderboard_test_score_overrides_daily_coin_check
-    check (daily_coin between 140 and 280 and mod(daily_coin, 10) = 0),
-  drop constraint if exists coin_leaderboard_test_score_overrides_weekly_coin_check,
+    check (daily_coin >= 140 and mod(daily_coin, 10) = 0),
   add constraint coin_leaderboard_test_score_overrides_weekly_coin_check
-    check (weekly_coin between 980 and 1960 and mod(weekly_coin, 10) = 0);
+    check (weekly_coin >= 980 and mod(weekly_coin, 10) = 0);
 
 insert into public.coin_leaderboard_test_score_overrides (user_id, daily_coin, weekly_coin)
 select
@@ -78,14 +82,16 @@ revoke all on table public.coin_leaderboard_test_profiles from public, anon, aut
 revoke all on table public.coin_leaderboard_test_events from public, anon, authenticated;
 revoke all on table public.coin_leaderboard_test_score_overrides from public, anon, authenticated;
 
-create or replace function public.get_coin_leaderboard_test_users()
+drop function if exists public.get_coin_leaderboard_test_users();
+
+create function public.get_coin_leaderboard_test_users()
 returns table (
   user_id uuid,
   display_name text,
   avatar_url text,
   gender text,
-  daily_coin integer,
-  weekly_coin integer
+  daily_coin bigint,
+  weekly_coin bigint
 )
 language plpgsql
 security definer
@@ -110,12 +116,14 @@ begin
 end;
 $$;
 
-create or replace function public.save_coin_leaderboard_test_user(
+drop function if exists public.save_coin_leaderboard_test_user(uuid, text, text, integer, integer);
+
+create function public.save_coin_leaderboard_test_user(
   p_user_id uuid,
   p_display_name text,
   p_gender text,
-  p_daily_coin integer,
-  p_weekly_coin integer
+  p_daily_coin bigint,
+  p_weekly_coin bigint
 )
 returns uuid
 language plpgsql
@@ -138,9 +146,9 @@ begin
   if p_gender is null or p_gender not in ('woman', 'man') then
     raise exception 'Gender must be woman or man';
   end if;
-  if p_daily_coin is null or p_daily_coin not between 140 and 280 or mod(p_daily_coin, 10) <> 0
-    or p_weekly_coin is null or p_weekly_coin not between 980 and 1960 or mod(p_weekly_coin, 10) <> 0 then
-    raise exception 'Daily coins must be 140–280 and weekly coins 980–1960, in multiples of 10';
+  if p_daily_coin is null or p_daily_coin < 140 or mod(p_daily_coin, 10) <> 0
+    or p_weekly_coin is null or p_weekly_coin < 980 or mod(p_weekly_coin, 10) <> 0 then
+    raise exception 'Daily coins must be at least 140 and weekly coins at least 980, in multiples of 10';
   end if;
 
   selected_avatar := case
@@ -192,12 +200,100 @@ begin
 end;
 $$;
 
+create or replace function public.shuffle_coin_leaderboard_test_scores()
+returns integer
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  test_user_count integer;
+  previous_daily_order uuid[];
+  previous_weekly_order uuid[];
+  shuffled_daily_order uuid[];
+  shuffled_weekly_order uuid[];
+  attempt integer;
+begin
+  if not public.is_admin() then
+    raise exception 'Administrator access is required';
+  end if;
+
+  select count(*)::integer
+    into test_user_count
+    from public.coin_leaderboard_test_profiles;
+  if test_user_count < 2 then
+    raise exception 'At least two leaderboard test users are required';
+  end if;
+
+  select array_agg(ranked.user_id order by ranked.daily_coin desc, ranked.user_id)
+    into previous_daily_order
+    from (
+      select profile.user_id, coalesce(score.daily_coin, 0) as daily_coin
+        from public.coin_leaderboard_test_profiles as profile
+        left join public.coin_leaderboard_test_score_overrides as score using (user_id)
+        order by coalesce(score.daily_coin, 0) desc, profile.user_id
+        limit 10
+    ) as ranked;
+  select array_agg(ranked.user_id order by ranked.weekly_coin desc, ranked.user_id)
+    into previous_weekly_order
+    from (
+      select profile.user_id, coalesce(score.weekly_coin, 0) as weekly_coin
+        from public.coin_leaderboard_test_profiles as profile
+        left join public.coin_leaderboard_test_score_overrides as score using (user_id)
+        order by coalesce(score.weekly_coin, 0) desc, profile.user_id
+        limit 10
+    ) as ranked;
+
+  for attempt in 1..25 loop
+    insert into public.coin_leaderboard_test_score_overrides (user_id, daily_coin, weekly_coin, updated_at)
+    select
+      profile.user_id,
+      (140 + 10 * floor(random() * 15))::integer,
+      (980 + 10 * floor(random() * 99))::integer,
+      now()
+      from public.coin_leaderboard_test_profiles as profile
+    on conflict (user_id) do update
+      set daily_coin = excluded.daily_coin,
+          weekly_coin = excluded.weekly_coin,
+          updated_at = excluded.updated_at;
+
+    select array_agg(ranked.user_id order by ranked.daily_coin desc, ranked.user_id)
+      into shuffled_daily_order
+      from (
+        select profile.user_id, score.daily_coin
+          from public.coin_leaderboard_test_profiles as profile
+          join public.coin_leaderboard_test_score_overrides as score using (user_id)
+          order by score.daily_coin desc, profile.user_id
+          limit 10
+      ) as ranked;
+    select array_agg(ranked.user_id order by ranked.weekly_coin desc, ranked.user_id)
+      into shuffled_weekly_order
+      from (
+        select profile.user_id, score.weekly_coin
+          from public.coin_leaderboard_test_profiles as profile
+          join public.coin_leaderboard_test_score_overrides as score using (user_id)
+          order by score.weekly_coin desc, profile.user_id
+          limit 10
+      ) as ranked;
+
+    if shuffled_daily_order is distinct from previous_daily_order
+      and shuffled_weekly_order is distinct from previous_weekly_order then
+      return test_user_count;
+    end if;
+  end loop;
+
+  raise exception 'Could not generate a new Daily and Weekly test-user top 10 order';
+end;
+$$;
+
 revoke execute on function public.get_coin_leaderboard_test_users() from public, anon;
-revoke execute on function public.save_coin_leaderboard_test_user(uuid, text, text, integer, integer) from public, anon;
+revoke execute on function public.save_coin_leaderboard_test_user(uuid, text, text, bigint, bigint) from public, anon;
 revoke execute on function public.delete_coin_leaderboard_test_user(uuid) from public, anon;
+revoke execute on function public.shuffle_coin_leaderboard_test_scores() from public, anon;
 grant execute on function public.get_coin_leaderboard_test_users() to authenticated;
-grant execute on function public.save_coin_leaderboard_test_user(uuid, text, text, integer, integer) to authenticated;
+grant execute on function public.save_coin_leaderboard_test_user(uuid, text, text, bigint, bigint) to authenticated;
 grant execute on function public.delete_coin_leaderboard_test_user(uuid) to authenticated;
+grant execute on function public.shuffle_coin_leaderboard_test_scores() to authenticated;
 
 drop function if exists public.get_coin_leaderboard(text);
 

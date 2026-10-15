@@ -107,6 +107,29 @@ export default function AdminClient({
     setCoinTestUsers(users);
   }
 
+  async function shuffleCoinTestUserScores() {
+    setCoinTestUsersMessage("");
+    setCoinTestUsersError("");
+    setCoinTestUsersBusy(true);
+    try {
+      const { data, error } = await createClient().rpc("shuffle_coin_leaderboard_test_scores");
+      if (error) throw new Error(error.message);
+      if (!Number.isSafeInteger(data) || Number(data) < 2) {
+        throw new Error("Supabase returned an invalid shuffled test-user count");
+      }
+      await refreshCoinTestUsers();
+      setCoinTestUserDraft(newCoinTestUserDraft);
+      setCoinTestUsersMessage(
+        `Skor Daily dan Weekly berhasil diacak ulang untuk ${Number(data).toLocaleString("id-ID")} pengguna uji.`,
+      );
+    } catch (error) {
+      console.error("Unable to shuffle leaderboard test-user scores", error);
+      setCoinTestUsersError(error instanceof Error ? error.message : "Gagal mengacak ulang skor pengguna uji.");
+    } finally {
+      setCoinTestUsersBusy(false);
+    }
+  }
+
   async function saveCoinTestUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setCoinTestUsersMessage("");
@@ -118,14 +141,12 @@ export default function AdminClient({
       !coinTestUserDraft.displayName.trim()
       || !Number.isSafeInteger(dailyCoin)
       ||       dailyCoin < 140
-      || dailyCoin > 280
       || dailyCoin % 10 !== 0
       || !Number.isSafeInteger(weeklyCoin)
       || weeklyCoin < 980
-      || weeklyCoin > 1_960
       || weeklyCoin % 10 !== 0
     ) {
-      setCoinTestUsersError("Daily coins harus 140–280 dan weekly coins 980–1.960, kelipatan 10.");
+      setCoinTestUsersError("Daily coins minimal 140 dan weekly coins minimal 980, keduanya dalam kelipatan 10.");
       return;
     }
 
@@ -341,18 +362,28 @@ export default function AdminClient({
               <span className="eyebrow">LEADERBOARD TEST DATA</span>
               <h2 id="coin-test-users-title">Pengguna uji leaderboard <span>({coinTestUsers.length})</span></h2>
             </div>
-            {coinTestUserDraft.userId && (
+            <div className="admin-test-user-heading-actions">
               <button
-                className="admin-delete"
+                className="admin-test-users-shuffle"
                 type="button"
-                disabled={coinTestUsersBusy}
-                onClick={() => setCoinTestUserDraft(newCoinTestUserDraft)}
+                disabled={coinTestUsersBusy || coinTestUsers.length < 2}
+                onClick={() => { void shuffleCoinTestUserScores(); }}
               >
-                Batal edit
+                {coinTestUsersBusy ? "Mengacak..." : "Acak ulang Daily & Weekly"}
               </button>
-            )}
+              {coinTestUserDraft.userId && (
+                <button
+                  className="admin-delete"
+                  type="button"
+                  disabled={coinTestUsersBusy}
+                  onClick={() => setCoinTestUserDraft(newCoinTestUserDraft)}
+                >
+                  Batal edit
+                </button>
+              )}
+            </div>
           </div>
-          <p className="admin-test-users-note">Kelola nama dan total koin uji. Perubahan skor langsung memengaruhi peringkat Daily dan Weekly.</p>
+          <p className="admin-test-users-note">Kelola nama dan total koin uji tanpa batas maksimum. Acak ulang mengubah skor Daily dan Weekly seluruh pengguna uji secara terpisah tanpa memengaruhi pengguna nyata.</p>
           <form ref={coinTestUserFormRef} className="admin-form admin-test-user-form" onSubmit={(event) => { void saveCoinTestUser(event); }}>
             <label htmlFor="coin-test-name">DISPLAY NAME</label>
             <input
@@ -389,7 +420,6 @@ export default function AdminClient({
                   id="coin-test-daily"
                   type="number"
                   min={140}
-                  max={280}
                   step={10}
                   required
                   value={coinTestUserDraft.dailyCoin}
@@ -405,7 +435,6 @@ export default function AdminClient({
                   id="coin-test-weekly"
                   type="number"
                   min={980}
-                  max={1_960}
                   step={10}
                   required
                   value={coinTestUserDraft.weeklyCoin}

@@ -6860,6 +6860,40 @@ h1, h2, h3, p {
   border-color: #f582964d;
 }
 
+.admin-test-user-heading-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  display: flex;
+}
+
+.admin-test-users-shuffle {
+  color: #b7fff4;
+  cursor: pointer;
+  background: #5cf2e214;
+  border: 1px solid #5cf2e25c;
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.admin-test-users-shuffle:hover {
+  background: #5cf2e226;
+  border-color: #5cf2e2ad;
+}
+
+.admin-test-users-shuffle:focus-visible {
+  outline-offset: 2px;
+  outline: 2px solid #5cf2e2;
+}
+
+.admin-test-users-shuffle:disabled {
+  cursor: wait;
+  opacity: .6;
+}
+
 .admin-test-users-note {
   color: #9aaac0;
   margin: -7px 0 0;
@@ -7108,6 +7142,22 @@ h1, h2, h3, p {
 
   .admin-resource-section {
     margin-top: 18px;
+  }
+
+  .admin-list-heading {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .admin-test-user-heading-actions {
+    justify-content: flex-start;
+    gap: 6px;
+    width: 100%;
+  }
+
+  .admin-test-users-shuffle {
+    padding: 7px 9px;
+    font-size: 9px;
   }
 
   .admin-resource-item {
