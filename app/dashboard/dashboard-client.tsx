@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { PDFDocument, PDFName, PDFRawStream, StandardFonts, decodePDFRawStream, rgb } from "pdf-lib";
+import { PDFArray, PDFDict, PDFDocument, PDFName, PDFRawStream, StandardFonts, decodePDFRawStream, rgb } from "pdf-lib";
 import { createClient } from "@/lib/supabase/client";
 import type { BonusType, UploadedBonusResource } from "@/lib/bonus";
 import type { PhaseDailyQuest, PhaseQuestProgress } from "@/lib/phase-quests";
@@ -1336,6 +1336,49 @@ export default function DashboardClient({
       if (document.getPageCount() !== 2) {
         throw new Error("The certificate design must contain exactly two pages");
       }
+      if (preview) {
+        const previewBackgroundResponse = await fetch("/certificates/joolo-40-day-preview-background.jpg?v=4");
+        if (!previewBackgroundResponse.ok) {
+          throw new Error(`Could not load preview certificate design: HTTP ${previewBackgroundResponse.status}`);
+        }
+        const previewBackground = await document.embedJpg(
+          new Uint8Array(await previewBackgroundResponse.arrayBuffer()),
+        );
+        const pageResources = document.getPage(0).node.Resources();
+        if (!pageResources) {
+          throw new Error("The certificate preview page is missing its image resources");
+        }
+        const pageXObjects = pageResources.lookup(PDFName.of("XObject"), PDFDict);
+        pageXObjects.set(PDFName.of("Im0"), previewBackground.ref);
+
+        const pageContents = document.getPage(0).node.Contents();
+        if (!(pageContents instanceof PDFArray)) {
+          throw new Error("The certificate preview page has an unsupported content layout");
+        }
+        let signerTextRemoved = false;
+        for (let index = 0; index < pageContents.size(); index++) {
+          const stream = document.context.lookup(pageContents.get(index));
+          if (!(stream instanceof PDFRawStream)) continue;
+          const streamText = new TextDecoder().decode(decodePDFRawStream(stream).decode());
+          if (!streamText.includes("/MCID 18") && !streamText.includes("/MCID 19")) continue;
+
+          const updatedStreamText = streamText.replace(
+            /\/P\s*<<\s*\/MCID\s+(?:18|19)\s*>>\s*BDC[\s\S]*?EMC/g,
+            "",
+          );
+          if (updatedStreamText === streamText) {
+            throw new Error("Could not remove signer text from the certificate preview");
+          }
+          pageContents.set(
+            index,
+            document.context.register(document.context.flateStream(new TextEncoder().encode(updatedStreamText))),
+          );
+          signerTextRemoved = true;
+        }
+        if (!signerTextRemoved) {
+          throw new Error("The certificate preview template is missing its signer text fields");
+        }
+      }
       const font = await document.embedFont(StandardFonts.Helvetica);
       const boldFont = await document.embedFont(StandardFonts.HelveticaBold);
       const nameFont = await document.embedFont(StandardFonts.TimesRomanItalic);
@@ -1388,6 +1431,26 @@ export default function DashboardClient({
         font: boldFont,
         color: rgb(0.62, 0.69, 0.8),
       });
+      if (preview) {
+        const signerName = "NAMA PENANDA TANGAN";
+        const signerNameSize = 9;
+        certificatePage.drawText(signerName, {
+          x: 582 + (162 - boldFont.widthOfTextAtSize(signerName, signerNameSize)) / 2,
+          y: 73,
+          size: signerNameSize,
+          font: boldFont,
+          color: rgb(0.94, 0.96, 1),
+        });
+        const signerRole = "[JABATAN] JOOLO";
+        const signerRoleSize = 7.5;
+        certificatePage.drawText(signerRole, {
+          x: 582 + (162 - boldFont.widthOfTextAtSize(signerRole, signerRoleSize)) / 2,
+          y: 56,
+          size: signerRoleSize,
+          font: boldFont,
+          color: rgb(0.76, 0.82, 0.9),
+        });
+      }
 
       const assessments = assessmentRows.map(({ assessment }) => assessment);
       const totals = assessments.reduce(
