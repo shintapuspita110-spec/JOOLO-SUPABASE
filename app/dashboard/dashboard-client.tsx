@@ -1328,7 +1328,7 @@ export default function DashboardClient({
     preview = false,
     certificateName = profileName.trim() || email || "JOOLO member",
   ) {
-      const templateResponse = await fetch("/certificates/joolo-40-day-template-clean.pdf?v=3");
+      const templateResponse = await fetch("/certificates/joolo-40-day-template-clean.pdf?v=5");
       if (!templateResponse.ok) {
         throw new Error(`Could not load certificate design: HTTP ${templateResponse.status}`);
       }
@@ -1337,11 +1337,11 @@ export default function DashboardClient({
         throw new Error("The certificate design must contain exactly two pages");
       }
       if (preview) {
-        const previewBackgroundResponse = await fetch("/certificates/joolo-40-day-preview-background.jpg?v=6");
+        const previewBackgroundResponse = await fetch("/certificates/joolo-40-day-preview-background.png?v=2");
         if (!previewBackgroundResponse.ok) {
           throw new Error(`Could not load preview certificate design: HTTP ${previewBackgroundResponse.status}`);
         }
-        const previewBackground = await document.embedJpg(
+        const previewBackground = await document.embedPng(
           new Uint8Array(await previewBackgroundResponse.arrayBuffer()),
         );
         const pageResources = document.getPage(0).node.Resources();
