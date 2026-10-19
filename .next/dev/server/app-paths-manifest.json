@@ -1,4 +1,5 @@
 {
+  "/api/bonus-cover/route": "app/api/bonus-cover/route.js",
   "/dashboard/page": "app/dashboard/page.js",
   "/login/page": "app/login/page.js",
   "/signup/page": "app/signup/page.js"

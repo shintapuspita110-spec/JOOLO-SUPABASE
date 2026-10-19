@@ -14,3 +14,9 @@
 {"timestamp":"05:22:42.433","source":"Server","level":"WARN","message":"[browser] \"Image with src \\\"/AVATAR/Woman/Stella.png\\\" has either width or height modified, but not the other. If you use CSS to change the size of your image, also include the styles 'width: \\\"auto\\\"' or 'height: \\\"auto\\\"' to maintain the aspect ratio.\""}
 {"timestamp":"05:22:42.450","source":"Server","level":"WARN","message":"[browser] \"Image with src \\\"/AVATAR/Woman/Aurora.png\\\" has either width or height modified, but not the other. If you use CSS to change the size of your image, also include the styles 'width: \\\"auto\\\"' or 'height: \\\"auto\\\"' to maintain the aspect ratio.\""}
 {"timestamp":"05:48:49.167","source":"Server","level":"LOG","message":"✓ Compiled in 3.7s"}
+{"timestamp":"23:19:08.041","source":"Server","level":"LOG","message":"✓ Compiled in 2.7s"}
+{"timestamp":"23:24:19.112","source":"Server","level":"LOG","message":"○ Compiling /api/bonus-cover ..."}
+{"timestamp":"24:05:46.735","source":"Server","level":"LOG","message":"✓ Compiled in 3.1s"}
+{"timestamp":"39:04:50.964","source":"Browser","level":"INFO","message":"Download the React DevTools for a better development experience: https://react.dev/link/react-devtools"}
+{"timestamp":"39:05:32.614","source":"Browser","level":"WARN","message":"Detected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior=\"smooth\"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior"}
+{"timestamp":"39:05:32.626","source":"Server","level":"WARN","message":"[browser] \"Detected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior=\\\"smooth\\\"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior\""}
