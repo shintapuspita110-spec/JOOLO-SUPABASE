@@ -4,6 +4,7 @@ import { FormEvent, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import type { UploadedBonusResource, BonusType } from "@/lib/bonus";
+import type { PhaseDailyQuest } from "@/lib/phase-quests";
 
 function getGoogleDriveImageUrl(value: string): string | null {
   try {
@@ -46,13 +47,22 @@ const newCoinTestUserDraft: CoinTestUserDraft = {
 
 export default function AdminClient({
   userId,
+  initialPhaseDailyQuests,
   initialResources,
   initialCoinTestUsers,
 }: {
   userId: string;
+  initialPhaseDailyQuests: PhaseDailyQuest[];
   initialResources: UploadedBonusResource[];
   initialCoinTestUsers: AdminCoinTestUser[];
 }) {
+  const [phaseDailyQuests, setPhaseDailyQuests] = useState(initialPhaseDailyQuests);
+  const [selectedPhase, setSelectedPhase] = useState(initialPhaseDailyQuests[0]?.phase_category_id ?? "");
+  const [selectedDay, setSelectedDay] = useState(initialPhaseDailyQuests[0]?.day_number ?? 1);
+  const [selectedPhaseQuestId, setSelectedPhaseQuestId] = useState("");
+  const [phaseQuestBusy, setPhaseQuestBusy] = useState(false);
+  const [phaseQuestMessage, setPhaseQuestMessage] = useState("");
+  const [phaseQuestError, setPhaseQuestError] = useState("");
   const [resources, setResources] = useState(initialResources);
   const [coinTestUsers, setCoinTestUsers] = useState(initialCoinTestUsers);
   const [coinTestUserDraft, setCoinTestUserDraft] = useState(newCoinTestUserDraft);
@@ -67,6 +77,16 @@ export default function AdminClient({
   const [coinTestUsersError, setCoinTestUsersError] = useState("");
   const coinTestUserFormRef = useRef<HTMLFormElement>(null);
   const coinTestUserNameInputRef = useRef<HTMLInputElement>(null);
+  const phaseOptions = useMemo(
+    () => Array.from(new Set(phaseDailyQuests.map((quest) => quest.phase_category_id))),
+    [phaseDailyQuests],
+  );
+  const phaseQuestsForSelection = useMemo(
+    () => phaseDailyQuests.filter((quest) => quest.phase_category_id === selectedPhase && quest.day_number === selectedDay),
+    [phaseDailyQuests, selectedDay, selectedPhase],
+  );
+  const selectedPhaseQuest = phaseQuestsForSelection.find((quest) => quest.id === selectedPhaseQuestId)
+    ?? phaseQuestsForSelection[0];
   const visibleCoinTestUsers = useMemo(() => {
     const search = coinTestUserSearch.trim().toLocaleLowerCase("id-ID");
     return coinTestUsers
@@ -209,6 +229,85 @@ export default function AdminClient({
     window.requestAnimationFrame(() => coinTestUserNameInputRef.current?.focus({ preventScroll: true }));
   }
 
+  async function updatePhaseDailyQuest(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedPhaseQuest) return;
+    setPhaseQuestMessage("");
+    setPhaseQuestError("");
+
+    const values = new FormData(event.currentTarget);
+    const focus = String(values.get("focus") ?? "").trim();
+    const taskName = String(values.get("taskName") ?? "").trim();
+    const shortDescription = String(values.get("shortDescription") ?? "").trim();
+    const frequency = String(values.get("frequency") ?? "");
+    const level = String(values.get("level") ?? "");
+    const target = String(values.get("target") ?? "").trim();
+    const totalCoin = Number(values.get("totalCoin"));
+    const maxPossibleCoin = Number(values.get("maxPossibleCoin"));
+    const skillCategoryId = String(values.get("skillCategoryId") ?? "").trim();
+    const softSkills = String(values.get("softSkills") ?? "").trim();
+    const coverImage = String(values.get("coverImage") ?? "").trim();
+
+    if (
+      !focus
+      || !taskName
+      || !shortDescription
+      || !target
+      || !skillCategoryId
+      || !softSkills
+      || !coverImage
+      || !Number.isSafeInteger(totalCoin)
+      || !Number.isSafeInteger(maxPossibleCoin)
+      || !["One-Time", "Daily", "Weekly"].includes(frequency)
+      || (level !== "Easy" && level !== "Medium" && level !== "Hard")
+    ) {
+      setPhaseQuestError("Lengkapi semua kolom dengan nilai yang valid.");
+      return;
+    }
+
+    setPhaseQuestBusy(true);
+    try {
+      const { error } = await createClient().rpc("update_phase_daily_quest", {
+        p_quest_id: selectedPhaseQuest.id,
+        p_focus: focus,
+        p_task_name: taskName,
+        p_short_description: shortDescription,
+        p_frequency: frequency,
+        p_level: level,
+        p_target: target,
+        p_total_coin: totalCoin,
+        p_skill_category_id: skillCategoryId,
+        p_soft_skills: softSkills,
+        p_max_possible_coin: maxPossibleCoin,
+        p_cover_image: coverImage,
+      });
+      if (error) throw new Error(error.message);
+
+      setPhaseDailyQuests((quests) => quests.map((quest) => quest.id === selectedPhaseQuest.id
+        ? {
+          ...quest,
+          focus,
+          task_name: taskName,
+          short_description: shortDescription,
+          frequency,
+          level,
+          target,
+          total_coin: totalCoin,
+          skill_category_id: skillCategoryId,
+          soft_skills: softSkills,
+          max_possible_coin: maxPossibleCoin,
+          cover_image: coverImage,
+        }
+        : quest));
+      setPhaseQuestMessage("Challenge berhasil diperbarui untuk semua user. Progres yang sudah ada tetap dipertahankan.");
+    } catch (error) {
+      console.error("Unable to update phase daily quest", error);
+      setPhaseQuestError(error instanceof Error ? error.message : "Gagal memperbarui challenge.");
+    } finally {
+      setPhaseQuestBusy(false);
+    }
+  }
+
   async function uploadResource(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage("");
@@ -315,6 +414,11 @@ export default function AdminClient({
         <a href="/dashboard" className="brand" aria-label="Kembali ke dashboard">
           <Image className="brand-logo" src="/joolo-logo.png" width={566} height={161} alt="" />
         </a>
+        <nav className="admin-section-nav" aria-label="Menu admin">
+          <a href="#admin-leaderboard">Edit Leaderboard</a>
+          <a href="#admin-challenge">Edit Challenge</a>
+          <a href="#admin-bonus">Edit Bonus</a>
+        </nav>
         <a className="admin-back-link" href="/dashboard">Kembali ke dashboard</a>
       </header>
 
@@ -322,10 +426,120 @@ export default function AdminClient({
         <section className="admin-heading">
           <span className="eyebrow"><span className="eyebrow-line" /> ADMINISTRATION</span>
           <h1>Manage <span>JOOLO</span></h1>
-          <p>Kelola resource Bonus dan data pengguna uji leaderboard. Perubahan skor pengguna uji langsung memengaruhi peringkat Daily dan Weekly.</p>
+          <p>Kelola kurikulum day challenge, resource Bonus, dan data pengguna uji leaderboard.</p>
         </section>
 
-        <section className="admin-panel" aria-labelledby="admin-upload-title">
+        <section id="admin-challenge" className="admin-panel admin-phase-quest-panel" aria-labelledby="admin-phase-quest-title">
+          <span className="eyebrow">GLOBAL CURRICULUM</span>
+          <h2 id="admin-phase-quest-title">Ubah day challenge</h2>
+          <p className="admin-phase-quest-note">
+            Perubahan kurikulum ini digunakan semua user setelah dashboard dimuat ulang. Status selesai dan progres yang sudah tersimpan tidak direset.
+          </p>
+          {phaseDailyQuests.length === 0 ? (
+            <p className="admin-empty">Kurikulum phase daily quest belum tersedia.</p>
+          ) : (
+            <>
+              <div className="admin-phase-quest-selectors">
+                <label>
+                  <span>PHASE</span>
+                  <select value={selectedPhase} onChange={(event) => {
+                    setSelectedPhase(event.currentTarget.value);
+                    setSelectedPhaseQuestId("");
+                    setPhaseQuestMessage("");
+                    setPhaseQuestError("");
+                  }}>
+                    {phaseOptions.map((phase) => <option key={phase} value={phase}>{phase.replace("PHASE_", "Phase ")}</option>)}
+                  </select>
+                </label>
+                <label>
+                  <span>DAY</span>
+                  <select value={selectedDay} onChange={(event) => {
+                    setSelectedDay(Number(event.currentTarget.value));
+                    setSelectedPhaseQuestId("");
+                    setPhaseQuestMessage("");
+                    setPhaseQuestError("");
+                  }}>
+                    {Array.from({ length: 40 }, (_, index) => index + 1).map((day) => (
+                      <option key={day} value={day}>Day {day}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              {phaseQuestsForSelection.length === 0 ? (
+                <p className="admin-empty">Belum ada challenge untuk phase dan day yang dipilih.</p>
+              ) : (
+                <>
+                  <label className="admin-phase-quest-picker">
+                    <span>CHALLENGE ({phaseQuestsForSelection.length})</span>
+                    <select
+                      value={selectedPhaseQuest?.id ?? ""}
+                      onChange={(event) => {
+                        setSelectedPhaseQuestId(event.currentTarget.value);
+                        setPhaseQuestMessage("");
+                        setPhaseQuestError("");
+                      }}
+                    >
+                      {phaseQuestsForSelection.map((quest) => <option key={quest.id} value={quest.id}>{quest.task_name}</option>)}
+                    </select>
+                  </label>
+                  {selectedPhaseQuest && (
+                    <form key={selectedPhaseQuest.id} className="admin-form admin-phase-quest-form" onSubmit={(event) => { void updatePhaseDailyQuest(event); }}>
+                      <label htmlFor="phase-quest-focus">FOKUS HARI</label>
+                      <input id="phase-quest-focus" name="focus" maxLength={200} defaultValue={selectedPhaseQuest.focus} required />
+
+                      <label htmlFor="phase-quest-task-name">NAMA CHALLENGE</label>
+                      <input id="phase-quest-task-name" name="taskName" maxLength={100} defaultValue={selectedPhaseQuest.task_name} required />
+
+                      <label htmlFor="phase-quest-description">DESKRIPSI</label>
+                      <textarea id="phase-quest-description" name="shortDescription" maxLength={300} rows={3} defaultValue={selectedPhaseQuest.short_description} required />
+
+                      <label htmlFor="phase-quest-frequency">FREKUENSI</label>
+                      <select id="phase-quest-frequency" name="frequency" defaultValue={selectedPhaseQuest.frequency} required>
+                        <option value="One-Time">One-Time</option>
+                        <option value="Daily">Daily</option>
+                        <option value="Weekly">Weekly</option>
+                      </select>
+
+                      <label htmlFor="phase-quest-level">LEVEL</label>
+                      <select id="phase-quest-level" name="level" defaultValue={selectedPhaseQuest.level} required>
+                        <option value="Easy">Easy</option>
+                        <option value="Medium">Medium</option>
+                        <option value="Hard">Hard</option>
+                      </select>
+
+                      <label htmlFor="phase-quest-target">TARGET</label>
+                      <input id="phase-quest-target" name="target" maxLength={120} defaultValue={selectedPhaseQuest.target} required />
+
+                      <div className="admin-phase-quest-numbers">
+                        <label htmlFor="phase-quest-total-coin">KOIN HADIAH</label>
+                        <input id="phase-quest-total-coin" name="totalCoin" type="number" min={0} max={100000} step={1} defaultValue={selectedPhaseQuest.total_coin} required />
+                        <label htmlFor="phase-quest-max-coin">KOIN MAKSIMAL</label>
+                        <input id="phase-quest-max-coin" name="maxPossibleCoin" type="number" min={0} max={100000} step={1} defaultValue={selectedPhaseQuest.max_possible_coin} required />
+                      </div>
+
+                      <label htmlFor="phase-quest-skill-category">ID KATEGORI SKILL</label>
+                      <input id="phase-quest-skill-category" name="skillCategoryId" maxLength={60} defaultValue={selectedPhaseQuest.skill_category_id} required />
+
+                      <label htmlFor="phase-quest-soft-skills">SOFT SKILLS</label>
+                      <textarea id="phase-quest-soft-skills" name="softSkills" maxLength={300} rows={2} defaultValue={selectedPhaseQuest.soft_skills} required />
+
+                      <label htmlFor="phase-quest-cover-image">COVER IMAGE</label>
+                      <input id="phase-quest-cover-image" name="coverImage" maxLength={500} defaultValue={selectedPhaseQuest.cover_image} required />
+
+                      {phaseQuestError && <p className="admin-feedback is-error" role="alert">{phaseQuestError}</p>}
+                      {phaseQuestMessage && <p className="admin-feedback" role="status">{phaseQuestMessage}</p>}
+                      <button className="primary-button admin-submit" type="submit" disabled={phaseQuestBusy}>
+                        {phaseQuestBusy ? "Menyimpan..." : "Simpan perubahan challenge"}
+                      </button>
+                    </form>
+                  )}
+                </>
+              )}
+            </>
+          )}
+        </section>
+
+        <section id="admin-bonus" className="admin-panel" aria-labelledby="admin-upload-title">
           <span className="eyebrow">PUBLISH A RESOURCE</span>
           <h2 id="admin-upload-title">Tambah bonus resource</h2>
           <form className="admin-form" onSubmit={(event) => { void uploadResource(event); }}>
@@ -356,7 +570,7 @@ export default function AdminClient({
           </form>
         </section>
 
-        <section className="admin-resource-section" aria-labelledby="coin-test-users-title">
+        <section id="admin-leaderboard" className="admin-resource-section" aria-labelledby="coin-test-users-title">
           <div className="admin-list-heading">
             <div>
               <span className="eyebrow">LEADERBOARD TEST DATA</span>

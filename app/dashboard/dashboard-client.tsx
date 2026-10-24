@@ -1328,7 +1328,7 @@ export default function DashboardClient({
     preview = false,
     certificateName = profileName.trim() || email || "JOOLO member",
   ) {
-      const templateResponse = await fetch("/certificates/joolo-40-day-template-clean.pdf?v=6");
+      const templateResponse = await fetch("/certificates/joolo-40-day-template-clean.pdf?v=7");
       if (!templateResponse.ok) {
         throw new Error(`Could not load certificate design: HTTP ${templateResponse.status}`);
       }
@@ -3001,7 +3001,7 @@ export default function DashboardClient({
           </section>
           <section className="profile-panel">
             <span className="profile-section-label">{t("SUPPORT")}</span>
-            <a className="profile-action-row guide-row" href="mailto:hello@joolo.app?subject=JOOLO%20support"><span className="profile-row-icon"><Icon name="support" size={24} /></span><strong>{t("Customer Service")}</strong><Icon name="chevron" size={21} /></a>
+            <a className="profile-action-row guide-row" href="https://wa.me/6287893951233"><span className="profile-row-icon"><Icon name="support" size={24} /></span><strong>{t("Customer Service")}</strong><Icon name="chevron" size={21} /></a>
           </section>
           <button className="profile-logout" onClick={() => setProfileDialog("logout")}><Icon name="logout" size={17} /> {t("Log Out")}</button>
           <footer className="profile-version">JOOLO <span>v1.0.0</span><i>✦</i></footer>
