@@ -789,3 +789,12 @@ body.dashboard-light{--ink:#1c2b40;--muted:#63748a;--soft:#52657c;--panel:rgba(2
 .dashboard-light .bonus-empty>strong{color:#263b53}
 .dashboard-light .bonus-empty button,.dashboard-light .bonus-footer button{color:#246f70}
 .dashboard-light .bonus-empty button:hover,.dashboard-light .bonus-footer button:hover{color:#174f51}
+.admin-access-codes-panel{margin-bottom:28px}
+.admin-access-codes-note{margin:10px 0 0;color:#9aaac0;font-size:11px;line-height:1.6}
+.admin-access-code-results{margin-top:23px;padding-top:18px;border-top:1px solid rgba(143,172,201,.18)}
+.admin-access-code-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.admin-access-code-heading h3{margin:0;color:#edf4ff;font:700 14px Manrope,sans-serif}
+.admin-access-code-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px;margin:0;padding:0;list-style:none}
+.admin-access-code-list li{padding:11px 12px;border:1px solid rgba(125,155,186,.2);border-radius:8px;background:rgba(5,14,27,.45)}
+.admin-access-code-list code{color:#9ffff5;font:600 12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.7px;overflow-wrap:anywhere}
+@media(max-width:560px){.admin-access-codes-panel{margin-bottom:18px}.admin-section-nav{justify-content:flex-start;overflow-x:auto;scrollbar-width:none}.admin-section-nav::-webkit-scrollbar{display:none}.admin-section-nav a{flex:0 0 auto}}

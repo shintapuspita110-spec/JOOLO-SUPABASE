@@ -8428,4 +8428,78 @@ body.dashboard-light {
   color: #174f51;
 }
 
+.admin-access-codes-panel {
+  margin-bottom: 28px;
+}
+
+.admin-access-codes-note {
+  color: #9aaac0;
+  margin: 10px 0 0;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.admin-access-code-results {
+  border-top: 1px solid #8facc92e;
+  margin-top: 23px;
+  padding-top: 18px;
+}
+
+.admin-access-code-heading {
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  display: flex;
+}
+
+.admin-access-code-heading h3 {
+  color: #edf4ff;
+  margin: 0;
+  font: 700 14px Manrope, sans-serif;
+}
+
+.admin-access-code-list {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+}
+
+.admin-access-code-list li {
+  background: #050e1b73;
+  border: 1px solid #7d9bba33;
+  border-radius: 8px;
+  padding: 11px 12px;
+}
+
+.admin-access-code-list code {
+  color: #9ffff5;
+  letter-spacing: .7px;
+  overflow-wrap: anywhere;
+  font: 600 12px / 1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+@media (max-width: 560px) {
+  .admin-access-codes-panel {
+    margin-bottom: 18px;
+  }
+
+  .admin-section-nav {
+    scrollbar-width: none;
+    justify-content: flex-start;
+    overflow-x: auto;
+  }
+
+  .admin-section-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .admin-section-nav a {
+    flex: none;
+  }
+}
+
 /*# sourceMappingURL=app_globals_0yg4wg8.css.map*/
