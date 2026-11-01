@@ -18,7 +18,10 @@ function isRecord(value: unknown): value is JsonRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function response(status: number, body: { error?: string; received?: boolean }): Response {
+function response(
+  status: number,
+  body: { error?: string; received?: boolean; invalid_fields?: string[] },
+): Response {
   return Response.json(body, {
     status,
     headers: {
@@ -148,12 +151,14 @@ export async function POST(request: Request) {
   try {
     bodyText = await readBoundedBody(request);
   } catch {
+    console.warn("Lynk webhook request body could not be read.");
     return response(400, { error: "Could not read webhook payload." });
   }
   if (bodyText === null) {
     return response(413, { error: "Webhook payload is too large." });
   }
   if (!bodyText.trim()) {
+    console.warn("Lynk webhook received an empty payload.");
     return response(400, { error: "Webhook payload is empty." });
   }
 
@@ -161,6 +166,7 @@ export async function POST(request: Request) {
   try {
     payload = JSON.parse(bodyText);
   } catch {
+    console.warn("Lynk webhook payload was not valid JSON.");
     return response(400, { error: "Webhook payload is not valid JSON." });
   }
 
@@ -186,11 +192,36 @@ export async function POST(request: Request) {
     typeof messageId !== "string" || !messageId.trim() || messageId.length > 200
     || typeof refId !== "string" || !refId.trim() || refId.length > 200
     || typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0
-    || typeof customerEmail !== "string" || customerEmail.length > 320
+    || typeof customerEmail !== "string"
+    || customerEmail.length > 320
     || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail)
     || (customerName !== undefined && typeof customerName !== "string")
   ) {
-    return response(400, { error: "Successful payment is missing required customer or transaction details." });
+    const invalidFields: string[] = [];
+    if (typeof messageId !== "string" || !messageId.trim() || messageId.length > 200) {
+      invalidFields.push("data.message_id");
+    }
+    if (typeof refId !== "string" || !refId.trim() || refId.length > 200) {
+      invalidFields.push("data.message_data.refId");
+    }
+    if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
+      invalidFields.push("data.message_data.totals.grandTotal");
+    }
+    if (
+      typeof customerEmail !== "string"
+      || customerEmail.length > 320
+      || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail)
+    ) {
+      invalidFields.push("data.message_data.customer.email");
+    }
+    if (customerName !== undefined && typeof customerName !== "string") {
+      invalidFields.push("data.message_data.customer.name");
+    }
+    console.warn("Lynk webhook successful payment has invalid fields.", invalidFields);
+    return response(400, {
+      error: "Successful payment is missing required customer or transaction details.",
+      invalid_fields: invalidFields,
+    });
   }
 
   const expectedSignature = createHash("sha256")
