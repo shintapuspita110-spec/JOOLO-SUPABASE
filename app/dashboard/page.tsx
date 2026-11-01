@@ -16,6 +16,14 @@ export default async function DashboardPage() {
     redirect("/login");
   }
 
+  const { data: hasClaimedAccessCode, error: accessCodeError } = await supabase.rpc("has_claimed_access_code");
+  if (accessCodeError) {
+    throw new Error(`Could not verify your access-code claim: ${accessCodeError.message}`);
+  }
+  if (hasClaimedAccessCode !== true) {
+    redirect("/onboarding/access-code");
+  }
+
   const { data: challengeSettings, error: challengeSettingsError } = await supabase
     .from("challenge_settings")
     .select("start_date, lives")

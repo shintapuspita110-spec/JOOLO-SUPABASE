@@ -13,40 +13,79 @@ create table if not exists public.access_codes (
 
 alter table public.access_codes enable row level security;
 revoke all on table public.access_codes from public, anon, authenticated, service_role;
+drop function if exists public.generate_access_codes(text[]);
 
-create or replace function public.claim_signup_access_code()
-returns trigger
+create unique index if not exists access_codes_redeemed_by_unique
+  on public.access_codes (redeemed_by)
+  where redeemed_by is not null;
+
+drop trigger if exists require_access_code_for_new_user on auth.users;
+drop function if exists public.claim_signup_access_code();
+
+create or replace function public.has_claimed_access_code()
+returns boolean
+language plpgsql
+security definer
+stable
+set search_path = ''
+as $$
+begin
+  return exists (
+    select 1
+    from public.access_codes
+    where redeemed_by = (select auth.uid())
+  );
+end;
+$$;
+
+revoke execute on function public.has_claimed_access_code() from public, anon;
+grant execute on function public.has_claimed_access_code() to authenticated;
+
+create or replace function public.claim_access_code(p_code text)
+returns boolean
 language plpgsql
 security definer
 set search_path = ''
 as $$
 declare
-  submitted_access_code text := upper(btrim(coalesce(new.raw_user_meta_data ->> 'access_code', '')));
+  current_user_id uuid := (select auth.uid());
+  submitted_code text := upper(btrim(coalesce(p_code, '')));
   claimed_code_hash bytea;
 begin
-  if submitted_access_code !~ '^[A-HJ-NP-Z2-9]{16,32}$' then
-    raise exception 'A valid 16–32 character access code is required';
+  if current_user_id is null then
+    raise exception 'Silakan masuk untuk mengklaim kode akses.';
+  end if;
+  if submitted_code !~ '^[A-HJ-NP-Z2-9]{16,32}$' then
+    raise exception 'Masukkan kode akses JOOLO yang valid.';
+  end if;
+  if exists (
+    select 1
+    from public.access_codes
+    where redeemed_by = current_user_id
+  ) then
+    raise exception 'Akun ini sudah pernah mengklaim kode akses.';
   end if;
 
   update public.access_codes
-    set redeemed_by = new.id,
-        redeemed_at = now()
-    where code_hash = extensions.digest(convert_to(submitted_access_code, 'UTF8'), 'sha256')
-      and redeemed_at is null
-    returning code_hash into claimed_code_hash;
+  set redeemed_by = current_user_id,
+      redeemed_at = now()
+  where code_hash = extensions.digest(convert_to(submitted_code, 'UTF8'), 'sha256')
+    and redeemed_at is null
+  returning code_hash into claimed_code_hash;
 
   if claimed_code_hash is null then
-    raise exception 'Access code is invalid or has already been used';
+    raise exception 'Kode akses tidak valid atau sudah pernah digunakan.';
   end if;
 
-  new.raw_user_meta_data := coalesce(new.raw_user_meta_data, '{}'::jsonb) - 'access_code';
-  return new;
+  return true;
+exception
+  when unique_violation then
+    raise exception 'Akun ini sudah pernah mengklaim kode akses.';
 end;
 $$;
 
-revoke execute on function public.claim_signup_access_code() from public, anon, authenticated;
-
-drop trigger if exists require_access_code_for_new_user on auth.users;
+revoke execute on function public.claim_access_code(text) from public, anon;
+grant execute on function public.claim_access_code(text) to authenticated;
 
 create or replace function public.handle_new_user()
 returns trigger
@@ -84,52 +123,6 @@ end;
 $$;
 
 revoke execute on function public.handle_new_user() from public, anon, authenticated;
-
-create or replace function public.generate_access_codes(p_codes text[])
-returns integer
-language plpgsql
-security definer
-set search_path = ''
-as $$
-declare
-  current_user_id uuid := (select auth.uid());
-  normalized_codes text[];
-begin
-  if not public.is_admin() then
-    raise exception 'Administrator access is required';
-  end if;
-  if p_codes is null or cardinality(p_codes) not between 1 and 100 then
-    raise exception 'Generate between 1 and 100 access codes at a time';
-  end if;
-
-  select array_agg(upper(btrim(code)))
-    into normalized_codes
-    from unnest(p_codes) as submitted(code);
-
-  if exists (
-    select 1
-      from unnest(normalized_codes) as submitted(code)
-      where code !~ '^[A-HJ-NP-Z2-9]{16,32}$'
-  ) then
-    raise exception 'Codes must contain 16–32 characters using the unambiguous access-code alphabet';
-  end if;
-  if cardinality(normalized_codes) <> (
-    select count(distinct code)::integer
-      from unnest(normalized_codes) as submitted(code)
-  ) then
-    raise exception 'Generated access codes must be unique';
-  end if;
-
-  insert into public.access_codes (code_hash, created_by)
-    select extensions.digest(convert_to(code, 'UTF8'), 'sha256'), current_user_id
-      from unnest(normalized_codes) as submitted(code);
-
-  return cardinality(normalized_codes);
-end;
-$$;
-
-revoke execute on function public.generate_access_codes(text[]) from public, anon;
-grant execute on function public.generate_access_codes(text[]) to authenticated;
 
 notify pgrst, 'reload schema';
 

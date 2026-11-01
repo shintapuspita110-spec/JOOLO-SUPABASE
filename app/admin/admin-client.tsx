@@ -6,20 +6,6 @@ import { createClient } from "@/lib/supabase/client";
 import type { UploadedBonusResource, BonusType } from "@/lib/bonus";
 import type { PhaseDailyQuest } from "@/lib/phase-quests";
 
-const ACCESS_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-
-function createAccessCodes(count: number): string[] {
-  const codes = new Set<string>();
-
-  while (codes.size < count) {
-    const randomBytes = crypto.getRandomValues(new Uint8Array(16));
-    const code = Array.from(randomBytes, (byte) => ACCESS_CODE_ALPHABET[byte % ACCESS_CODE_ALPHABET.length]).join("");
-    codes.add(code);
-  }
-
-  return Array.from(codes);
-}
-
 function getGoogleDriveImageUrl(value: string): string | null {
   try {
     const url = new URL(value);
@@ -83,11 +69,6 @@ export default function AdminClient({
   const [coinTestUserSearch, setCoinTestUserSearch] = useState("");
   const [coinTestUserGenderFilter, setCoinTestUserGenderFilter] = useState<"all" | "woman" | "man">("all");
   const [coinTestUserSort, setCoinTestUserSort] = useState<"name" | "daily" | "weekly">("name");
-  const [accessCodeCount, setAccessCodeCount] = useState(10);
-  const [accessCodes, setAccessCodes] = useState<string[]>([]);
-  const [accessCodesBusy, setAccessCodesBusy] = useState(false);
-  const [accessCodesMessage, setAccessCodesMessage] = useState("");
-  const [accessCodesError, setAccessCodesError] = useState("");
   const [busy, setBusy] = useState(false);
   const [coinTestUsersBusy, setCoinTestUsersBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -118,47 +99,6 @@ export default function AdminClient({
         return first.display_name.localeCompare(second.display_name, "id");
       });
   }, [coinTestUsers, coinTestUserGenderFilter, coinTestUserSearch, coinTestUserSort]);
-
-  async function generateAccessCodes(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setAccessCodesMessage("");
-    setAccessCodesError("");
-
-    if (!Number.isSafeInteger(accessCodeCount) || accessCodeCount < 1 || accessCodeCount > 100) {
-      setAccessCodesError("Buat antara 1 dan 100 kode akses sekaligus.");
-      return;
-    }
-
-    setAccessCodesBusy(true);
-    try {
-      const codes = createAccessCodes(accessCodeCount);
-      const { data, error } = await createClient().rpc("generate_access_codes", { p_codes: codes });
-      if (error) throw new Error(error.message);
-      if (!Number.isSafeInteger(data) || Number(data) !== codes.length) {
-        throw new Error("Supabase mengembalikan jumlah kode akses yang tidak sesuai.");
-      }
-
-      setAccessCodes(codes);
-      setAccessCodesMessage(`${codes.length} kode akses berhasil dibuat dan disimpan.`);
-    } catch (error) {
-      console.error("Unable to generate access codes", error);
-      setAccessCodesError(error instanceof Error ? error.message : "Gagal membuat kode akses.");
-    } finally {
-      setAccessCodesBusy(false);
-    }
-  }
-
-  async function copyAccessCodes() {
-    setAccessCodesMessage("");
-    setAccessCodesError("");
-    try {
-      await navigator.clipboard.writeText(accessCodes.join("\n"));
-      setAccessCodesMessage(`${accessCodes.length} kode akses berhasil disalin.`);
-    } catch (error) {
-      console.error("Unable to copy access codes", error);
-      setAccessCodesError("Kode tidak dapat disalin. Pastikan browser mengizinkan akses clipboard.");
-    }
-  }
 
   async function refreshCoinTestUsers() {
     const { data, error } = await createClient().rpc("get_coin_leaderboard_test_users");
@@ -491,42 +431,11 @@ export default function AdminClient({
         </section>
 
         <section id="admin-access-codes" className="admin-panel admin-access-codes-panel" aria-labelledby="admin-access-codes-title">
-          <span className="eyebrow">SIGNUP ACCESS</span>
-          <h2 id="admin-access-codes-title">Generate kode akses</h2>
+          <span className="eyebrow">LYNK.ID PAYMENT WEBHOOK</span>
+          <h2 id="admin-access-codes-title">Kode akses otomatis</h2>
           <p className="admin-access-codes-note">
-            Kode unik 16 karakter akan dibuat dan disimpan untuk pendaftaran. Kode yang ditampilkan hanya tersedia di halaman ini; database menyimpan hash-nya.
+            Kode unik 16 karakter hanya diterbitkan setelah webhook Lynk.id menerima transaksi sukses dengan signature valid. Kode dikirim otomatis ke email customer melalui Brevo; transaksi webhook yang sama tidak membuat kode baru.
           </p>
-          <form className="admin-form" onSubmit={(event) => { void generateAccessCodes(event); }}>
-            <label htmlFor="access-code-count">JUMLAH KODE (1–100)</label>
-            <input
-              id="access-code-count"
-              type="number"
-              min={1}
-              max={100}
-              step={1}
-              value={accessCodeCount}
-              onChange={(event) => setAccessCodeCount(event.currentTarget.valueAsNumber)}
-              required
-            />
-            {accessCodesError && <p className="admin-feedback is-error" role="alert">{accessCodesError}</p>}
-            {accessCodesMessage && <p className="admin-feedback" role="status">{accessCodesMessage}</p>}
-            <button className="primary-button admin-submit" type="submit" disabled={accessCodesBusy}>
-              {accessCodesBusy ? "Membuat kode..." : "Buat kode akses"}
-            </button>
-          </form>
-          {accessCodes.length > 0 && (
-            <div className="admin-access-code-results" aria-labelledby="admin-access-code-results-title">
-              <div className="admin-access-code-heading">
-                <h3 id="admin-access-code-results-title">Kode akses baru</h3>
-                <button className="admin-test-users-shuffle" type="button" onClick={() => { void copyAccessCodes(); }}>
-                  Salin semua
-                </button>
-              </div>
-              <ul className="admin-access-code-list">
-                {accessCodes.map((code) => <li key={code}><code>{code}</code></li>)}
-              </ul>
-            </div>
-          )}
         </section>
 
         <section id="admin-challenge" className="admin-panel admin-phase-quest-panel" aria-labelledby="admin-phase-quest-title">

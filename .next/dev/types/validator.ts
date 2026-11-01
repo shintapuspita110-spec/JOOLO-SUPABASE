@@ -74,6 +74,15 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
   type __Unused = __Check
 }
 
+// Validate ../../../app/onboarding/access-code/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/onboarding/access-code">> = Specific
+  const handler = {} as typeof import("../../../app/onboarding/access-code/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../../app/page.tsx
 {
   type __IsExpected<Specific extends AppPageConfig<"/">> = Specific
@@ -96,6 +105,15 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
 {
   type __IsExpected<Specific extends RouteHandlerConfig<"/api/bonus-cover">> = Specific
   const handler = {} as typeof import("../../../app/api/bonus-cover/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../../app/api/lynk/webhook/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/lynk/webhook">> = Specific
+  const handler = {} as typeof import("../../../app/api/lynk/webhook/route.js")
   type __Check = __IsExpected<typeof handler>
   // @ts-ignore
   type __Unused = __Check

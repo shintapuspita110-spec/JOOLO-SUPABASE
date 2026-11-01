@@ -6122,6 +6122,45 @@ h1, h2, h3, p {
   padding-top: 14px;
 }
 
+.access-code-card .login-eyebrow {
+  margin-top: 32px;
+}
+
+.access-code-card h1 {
+  letter-spacing: -1.5px;
+  font-size: clamp(30px, 7vw, 39px);
+}
+
+.access-code-welcome {
+  color: #b5c2d5;
+  margin-top: 17px;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.access-code-welcome p {
+  margin: 0 0 12px;
+}
+
+.access-code-welcome a {
+  color: #9ffff5;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.access-code-welcome a:hover {
+  text-decoration: underline;
+}
+
+.access-code-form {
+  margin-top: 18px;
+}
+
+.access-code-form > input {
+  text-transform: uppercase;
+  letter-spacing: 1.4px;
+}
+
 @media (max-width: 560px) {
   .login-screen {
     padding: 20px 17px;
@@ -6314,6 +6353,23 @@ h1, h2, h3, p {
   .onboarding-card .login-footer {
     margin-top: 15px;
     padding-top: 12px;
+  }
+
+  .access-code-card .login-eyebrow {
+    margin-top: 24px;
+  }
+
+  .access-code-card h1 {
+    font-size: 32px;
+  }
+
+  .access-code-welcome {
+    font-size: 11px;
+    line-height: 1.65;
+  }
+
+  .access-code-form {
+    margin-top: 16px;
   }
 }
 
@@ -8437,49 +8493,6 @@ body.dashboard-light {
   margin: 10px 0 0;
   font-size: 11px;
   line-height: 1.6;
-}
-
-.admin-access-code-results {
-  border-top: 1px solid #8facc92e;
-  margin-top: 23px;
-  padding-top: 18px;
-}
-
-.admin-access-code-heading {
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
-  display: flex;
-}
-
-.admin-access-code-heading h3 {
-  color: #edf4ff;
-  margin: 0;
-  font: 700 14px Manrope, sans-serif;
-}
-
-.admin-access-code-list {
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-}
-
-.admin-access-code-list li {
-  background: #050e1b73;
-  border: 1px solid #7d9bba33;
-  border-radius: 8px;
-  padding: 11px 12px;
-}
-
-.admin-access-code-list code {
-  color: #9ffff5;
-  letter-spacing: .7px;
-  overflow-wrap: anywhere;
-  font: 600 12px / 1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 @media (max-width: 560px) {
