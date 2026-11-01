@@ -24,12 +24,55 @@ function getSignedPaymentAmount(value: unknown): string | null {
   }
   if (typeof value !== "string" || value.length > 40) return null;
 
-  const normalizedAmount = value.trim();
-  if (!/^(?:\d+(?:\.\d+)?|\.\d+|\d{1,3}(?:,\d{3})+(?:\.\d+)?)$/.test(normalizedAmount)) {
-    return null;
+  const amountText = value.trim()
+    .replace(/^(?:rp|idr)\s*/i, "")
+    .replace(/\s*(?:rp|idr)$/i, "")
+    .replace(/\s+/g, "");
+  if (!amountText || !/^\d[\d.,]*$/.test(amountText)) return null;
+
+  const lastComma = amountText.lastIndexOf(",");
+  const lastDot = amountText.lastIndexOf(".");
+  let normalizedAmount: string;
+
+  if (lastComma >= 0 && lastDot >= 0) {
+    const decimalSeparator = lastComma > lastDot ? "," : ".";
+    const groupSeparator = decimalSeparator === "," ? "." : ",";
+    const separatorIndex = Math.max(lastComma, lastDot);
+    const integerPart = amountText.slice(0, separatorIndex);
+    const decimalPart = amountText.slice(separatorIndex + 1);
+    const integerGroups = integerPart.split(groupSeparator);
+    const validGroupedInteger = integerGroups[0].length >= 1
+      && integerGroups[0].length <= 3
+      && /^\d+$/.test(integerGroups[0])
+      && integerGroups.slice(1).every((group) => /^\d{3}$/.test(group));
+    if (
+      !decimalPart
+      || !/^\d+$/.test(decimalPart)
+      || (!/^\d+$/.test(integerPart) && !validGroupedInteger)
+    ) {
+      return null;
+    }
+    normalizedAmount = `${integerPart.replace(/[.,]/g, "")}.${decimalPart}`;
+  } else if (lastComma >= 0 || lastDot >= 0) {
+    const separator = lastComma >= 0 ? "," : ".";
+    const parts = amountText.split(separator);
+    const isThousandsGrouped = parts.length > 1
+      && parts[0].length >= 1
+      && parts[0].length <= 3
+      && /^\d+$/.test(parts[0])
+      && parts.slice(1).every((group) => /^\d{3}$/.test(group));
+    if (isThousandsGrouped) {
+      normalizedAmount = amountText.replace(/[.,]/g, "");
+    } else if (parts.length === 2 && parts.every((part) => /^\d+$/.test(part))) {
+      normalizedAmount = `${parts[0]}.${parts[1]}`;
+    } else {
+      return null;
+    }
+  } else {
+    normalizedAmount = amountText;
   }
 
-  const numericAmount = Number(normalizedAmount.replaceAll(",", ""));
+  const numericAmount = Number(normalizedAmount);
   return Number.isFinite(numericAmount) && numericAmount > 0 ? value : null;
 }
 
