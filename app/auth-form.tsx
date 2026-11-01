@@ -100,11 +100,29 @@ export default function AuthForm({ mode }: AuthFormProps) {
           setMessage("Akun berhasil dibuat. Periksa email untuk konfirmasi sebelum login.");
         }
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) {
-          setMessage(error.message);
+        const response = await fetch("/api/auth/login", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
+          cache: "no-store",
+        });
+        const result: unknown = await response.json();
+        if (
+          typeof result !== "object"
+          || result === null
+          || !("authenticated" in result)
+          || result.authenticated !== true
+        ) {
+          const errorMessage = typeof result === "object" && result !== null && "error" in result
+            && typeof result.error === "string"
+            ? result.error
+            : "Login belum berhasil. Silakan coba lagi.";
+          setMessage(errorMessage);
+        } else if (!response.ok) {
+          setMessage("Login belum berhasil. Silakan coba lagi.");
         } else {
-          window.location.replace("/dashboard");
+          window.location.assign("/dashboard");
         }
       }
     } catch (error) {
