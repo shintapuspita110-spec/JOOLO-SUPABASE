@@ -45,7 +45,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
       if (error) {
         setMessage(error.message);
       } else if (data.session) {
-        router.replace("/dashboard");
+        window.location.replace("/dashboard");
       }
     });
 
@@ -95,8 +95,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
         if (error) {
           setMessage(error.message);
         } else if (data.session) {
-          router.replace("/dashboard");
-          router.refresh();
+          window.location.replace("/dashboard");
         } else {
           setMessage("Akun berhasil dibuat. Periksa email untuk konfirmasi sebelum login.");
         }
@@ -105,8 +104,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
         if (error) {
           setMessage(error.message);
         } else {
-          router.replace("/dashboard");
-          router.refresh();
+          window.location.replace("/dashboard");
         }
       }
     } catch (error) {
