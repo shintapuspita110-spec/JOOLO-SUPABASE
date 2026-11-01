@@ -18,6 +18,21 @@ function isRecord(value: unknown): value is JsonRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function getSignedPaymentAmount(value: unknown): string | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) && value > 0 ? String(value) : null;
+  }
+  if (typeof value !== "string" || value.length > 40) return null;
+
+  const normalizedAmount = value.trim();
+  if (!/^(?:\d+(?:\.\d+)?|\.\d+|\d{1,3}(?:,\d{3})+(?:\.\d+)?)$/.test(normalizedAmount)) {
+    return null;
+  }
+
+  const numericAmount = Number(normalizedAmount.replaceAll(",", ""));
+  return Number.isFinite(numericAmount) && numericAmount > 0 ? value : null;
+}
+
 function response(
   status: number,
   body: { error?: string; received?: boolean; invalid_fields?: string[] },
@@ -184,6 +199,7 @@ export async function POST(request: Request) {
   const messageId = paymentData.message_id;
   const refId = messageData?.refId;
   const amount = totals?.grandTotal;
+  const signedAmount = getSignedPaymentAmount(amount);
   const customerEmail = customer?.email;
   const customerName = customer?.name;
   const receivedSignature = request.headers.get("X-Lynk-Signature")?.trim() ?? "";
@@ -191,7 +207,7 @@ export async function POST(request: Request) {
   if (
     typeof messageId !== "string" || !messageId.trim() || messageId.length > 200
     || typeof refId !== "string" || !refId.trim() || refId.length > 200
-    || typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0
+    || signedAmount === null
     || typeof customerEmail !== "string"
     || customerEmail.length > 320
     || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail)
@@ -204,7 +220,7 @@ export async function POST(request: Request) {
     if (typeof refId !== "string" || !refId.trim() || refId.length > 200) {
       invalidFields.push("data.message_data.refId");
     }
-    if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
+    if (signedAmount === null) {
       invalidFields.push("data.message_data.totals.grandTotal");
     }
     if (
@@ -225,7 +241,7 @@ export async function POST(request: Request) {
   }
 
   const expectedSignature = createHash("sha256")
-    .update(`${String(amount)}${refId}${messageId}${merchantKey}`, "utf8")
+    .update(`${signedAmount}${refId}${messageId}${merchantKey}`, "utf8")
     .digest();
   if (!/^[a-f\d]{64}$/i.test(receivedSignature)) {
     return response(401, { error: "Invalid Lynk signature." });
