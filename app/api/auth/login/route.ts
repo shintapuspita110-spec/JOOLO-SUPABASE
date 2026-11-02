@@ -1,5 +1,6 @@
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
 import { supabaseCookieOptions } from "@/lib/supabase/cookie-options";
 
 function jsonResponse(status: number, body: { error?: string; authenticated?: boolean }): Response {
@@ -52,14 +53,17 @@ export async function POST(request: Request) {
   }
 
   const cookieStore = await cookies();
+  const pendingCookies: Array<{ name: string; value: string; options: CookieOptions }> = [];
+  let pendingHeaders: Record<string, string> = {};
   const supabase = createServerClient(supabaseUrl, supabaseKey, {
     cookieOptions: supabaseCookieOptions,
     cookies: {
       getAll() {
         return cookieStore.getAll();
       },
-      setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
+      setAll(cookiesToSet, headers) {
+        pendingCookies.push(...cookiesToSet);
+        pendingHeaders = { ...pendingHeaders, ...headers };
       },
     },
   });
@@ -77,5 +81,16 @@ export async function POST(request: Request) {
     return jsonResponse(502, { error: "Login belum membuat sesi. Silakan coba lagi." });
   }
 
-  return jsonResponse(200, { authenticated: true });
+  const response = NextResponse.json(
+    { authenticated: true },
+    {
+      headers: {
+        "Cache-Control": "no-store",
+        "X-Content-Type-Options": "nosniff",
+        ...pendingHeaders,
+      },
+    },
+  );
+  pendingCookies.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
+  return response;
 }

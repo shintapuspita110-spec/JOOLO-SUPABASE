@@ -13,7 +13,7 @@ export default async function DashboardPage() {
     throw new Error(`Could not verify your Supabase session: ${userError.message}`);
   }
   if (!user) {
-    redirect("/login");
+    redirect("/login?error=session-missing");
   }
 
   const { data: hasClaimedAccessCode, error: accessCodeError } = await supabase.rpc("has_claimed_access_code");

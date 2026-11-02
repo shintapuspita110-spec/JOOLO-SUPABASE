@@ -32,8 +32,12 @@ export default function AuthForm({ mode }: AuthFormProps) {
   const configured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
   useEffect(() => {
-    const callbackError = new URLSearchParams(window.location.search).get("error");
-    if (callbackError) setMessage(callbackError);
+    const loginError = new URLSearchParams(window.location.search).get("error");
+    if (loginError === "session-missing") {
+      setMessage("Login diterima, tetapi sesi tidak tersimpan di browser. Periksa pengaturan cookie browser, lalu coba lagi. Jika tetap terjadi, hubungi tim dukungan.");
+      return;
+    }
+    if (loginError) setMessage(loginError);
     if (!configured) return;
     let mounted = true;
     const supabase = createClient();
