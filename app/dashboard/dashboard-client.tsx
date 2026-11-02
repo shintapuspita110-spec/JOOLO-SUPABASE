@@ -865,6 +865,14 @@ function readStored<T>(key: string, fallback: T, userId: string): T {
   }
 }
 
+function writeStored<T>(key: string, value: T, userId: string) {
+  try {
+    localStorage.setItem(`${userId}:${key}`, JSON.stringify(value));
+  } catch (error) {
+    console.warn("Could not save dashboard preference in local storage.", error);
+  }
+}
+
 export default function DashboardClient({
   userId,
   email,
@@ -1000,13 +1008,13 @@ export default function DashboardClient({
 
   useEffect(() => {
     if (!hydrated) return;
-    localStorage.setItem(`${userId}:joolo-gender`, JSON.stringify(gender));
-    localStorage.setItem(`${userId}:joolo-challenges`, JSON.stringify(challenges));
-    localStorage.setItem(`${userId}:joolo-daily-stardust`, JSON.stringify(dailyStardustByDay));
-    localStorage.setItem(`${userId}:joolo-challenge-completion-days`, JSON.stringify(challengeCompletionDays));
-    localStorage.setItem(`${userId}:joolo-profile-name`, JSON.stringify(profileName));
-    localStorage.setItem(`${userId}:joolo-profile-theme`, JSON.stringify(profileTheme));
-    localStorage.setItem(`${userId}:joolo-language`, JSON.stringify(language));
+    writeStored("joolo-gender", gender, userId);
+    writeStored("joolo-challenges", challenges, userId);
+    writeStored("joolo-daily-stardust", dailyStardustByDay, userId);
+    writeStored("joolo-challenge-completion-days", challengeCompletionDays, userId);
+    writeStored("joolo-profile-name", profileName, userId);
+    writeStored("joolo-profile-theme", profileTheme, userId);
+    writeStored("joolo-language", language, userId);
   }, [gender, challenges, dailyStardustByDay, challengeCompletionDays, coins, profileName, profileTheme, language, hydrated, userId]);
 
   useEffect(() => {
@@ -2528,16 +2536,6 @@ export default function DashboardClient({
     setProfileOpen(false);
     router.replace("/login");
     router.refresh();
-  }
-
-  if (!hydrated) {
-    return (
-      <main className="cosmos login-screen">
-        <div className="stars stars-one" /><div className="stars stars-two" />
-        <div className="nebula nebula-left" /><div className="nebula nebula-right" />
-        <p className="login-loading" role="status">{t("Opening your orbit...")}</p>
-      </main>
-    );
   }
 
   return (
