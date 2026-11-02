@@ -2,7 +2,6 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -25,7 +24,6 @@ const signupAvatars: Record<SignupGender, Array<{ name: string; src: string }>> 
 };
 
 export default function AuthForm({ mode }: AuthFormProps) {
-  const router = useRouter();
   const isSignup = mode === "signup";
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -40,19 +38,23 @@ export default function AuthForm({ mode }: AuthFormProps) {
     let mounted = true;
     const supabase = createClient();
 
-    void supabase.auth.getSession().then(({ data, error }) => {
+    void supabase.auth.getUser().then(({ data, error }) => {
       if (!mounted) return;
-      if (error) {
-        setMessage(error.message);
-      } else if (data.session) {
+      if (data.user) {
         window.location.replace("/dashboard");
+      } else if (error && error.name !== "AuthSessionMissingError") {
+        setMessage(error.message);
+      }
+    }).catch((error: unknown) => {
+      if (mounted) {
+        setMessage(error instanceof Error ? error.message : "Tidak dapat memverifikasi sesi login.");
       }
     });
 
     return () => {
       mounted = false;
     };
-  }, [configured, router]);
+  }, [configured]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

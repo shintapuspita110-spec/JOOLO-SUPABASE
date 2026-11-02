@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { supabaseCookieOptions } from "@/lib/supabase/cookie-options";
 
 function jsonResponse(status: number, body: { error?: string; authenticated?: boolean }): Response {
   return Response.json(body, {
@@ -52,6 +53,7 @@ export async function POST(request: Request) {
 
   const cookieStore = await cookies();
   const supabase = createServerClient(supabaseUrl, supabaseKey, {
+    cookieOptions: supabaseCookieOptions,
     cookies: {
       getAll() {
         return cookieStore.getAll();
