@@ -4,8 +4,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { getAuthErrorMessage } from "@/lib/auth-messages";
 
-type AuthFormProps = { mode: "login" | "signup" };
+type AuthFormProps = { mode: "login" | "signup"; initialMessage?: string };
 type SignupGender = "woman" | "man";
 
 const signupAvatars: Record<SignupGender, Array<{ name: string; src: string }>> = {
@@ -23,21 +24,21 @@ const signupAvatars: Record<SignupGender, Array<{ name: string; src: string }>> 
   ],
 };
 
-export default function AuthForm({ mode }: AuthFormProps) {
+export default function AuthForm({ mode, initialMessage = "" }: AuthFormProps) {
   const isSignup = mode === "signup";
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState(initialMessage);
   const [gender, setGender] = useState<SignupGender | "">("");
   const [avatarUrl, setAvatarUrl] = useState("");
   const configured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
   useEffect(() => {
     const loginError = new URLSearchParams(window.location.search).get("error");
-    if (loginError === "session-missing") {
-      setMessage("Login diterima, tetapi sesi tidak tersimpan di browser. Periksa pengaturan cookie browser, lalu coba lagi. Jika tetap terjadi, hubungi tim dukungan.");
+    if (loginError) {
+      setMessage(getAuthErrorMessage(loginError));
       return;
     }
-    if (loginError) setMessage(loginError);
+    if (initialMessage) return;
     if (!configured) return;
     let mounted = true;
     const supabase = createClient();
@@ -58,7 +59,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
     return () => {
       mounted = false;
     };
-  }, [configured]);
+  }, [configured, initialMessage]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -153,7 +154,12 @@ export default function AuthForm({ mode }: AuthFormProps) {
         <h1 id="auth-title">{isSignup ? <>Create your <span>account.</span></> : <>Your journey<br />starts <span>within.</span></>}</h1>
         <p className="login-copy">{isSignup ? "Create an account to save your journey and get started." : "Log in to continue your 40-day cosmic growth journey."}</p>
         {!configured && <p className="auth-message" role="status">Supabase belum dikonfigurasi. Salin .env.example ke .env.local dan isi URL serta publishable/anon key proyek Supabase.</p>}
-        <form className="login-form" onSubmit={submit}>
+        <form
+          className="login-form"
+          method="post"
+          action={isSignup ? "/signup" : "/api/auth/login"}
+          onSubmit={submit}
+        >
           {isSignup && <>
             <label htmlFor="auth-name">FULL NAME</label>
             <input id="auth-name" name="fullName" type="text" autoComplete="name" placeholder="Your name" maxLength={60} required />
