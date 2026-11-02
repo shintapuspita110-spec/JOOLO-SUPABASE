@@ -1,7 +1,5 @@
 {
-  "/_not-found/page": "app/_not-found/page.js",
-  "/admin/page": "app/admin/page.js",
-  "/api/bonus-cover/route": "app/api/bonus-cover/route.js",
+  "/api/auth/login/route": "app/api/auth/login/route.js",
   "/dashboard/page": "app/dashboard/page.js",
   "/login/page": "app/login/page.js",
   "/onboarding/access-code/page": "app/onboarding/access-code/page.js",
