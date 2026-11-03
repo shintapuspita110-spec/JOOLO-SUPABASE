@@ -813,3 +813,12 @@ body.dashboard-light{--ink:#1c2b40;--muted:#63748a;--soft:#52657c;--panel:rgba(2
 .admin-access-codes-panel{margin-bottom:28px}
 .admin-access-codes-note{margin:10px 0 0;color:#9aaac0;font-size:11px;line-height:1.6}
 @media(max-width:560px){.admin-access-codes-panel{margin-bottom:18px}.admin-section-nav{justify-content:flex-start;overflow-x:auto;scrollbar-width:none}.admin-section-nav::-webkit-scrollbar{display:none}.admin-section-nav a{flex:0 0 auto}}
+@media(max-width:560px){
+  .topbar:not(.admin-topbar){height:62px;min-height:0;padding:0 8px;gap:6px}
+  .topbar:not(.admin-topbar) .brand{flex:0 0 auto}
+  .topbar:not(.admin-topbar) .brand-logo{width:62px}
+  .topbar:not(.admin-topbar) .main-nav{gap:8px;margin:0}
+  .topbar:not(.admin-topbar) .main-nav .nav-link:first-child{display:inline-flex}
+  .topbar:not(.admin-topbar) .header-actions{gap:2px}
+}
+@media(max-width:390px){.topbar:not(.admin-topbar) .brand-logo{width:50px}.topbar:not(.admin-topbar) .main-nav{gap:4px}}
