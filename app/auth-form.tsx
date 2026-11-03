@@ -14,7 +14,6 @@ export default function AuthForm({ mode, initialMessage = "" }: AuthFormProps) {
   const isSignup = mode === "signup";
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(initialMessage);
-  const [gender, setGender] = useState<SignupGender | "">("");
   const configured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 
   useEffect(() => {
@@ -167,47 +166,53 @@ export default function AuthForm({ mode, initialMessage = "" }: AuthFormProps) {
           {isSignup && <>
             <label htmlFor="auth-name">FULL NAME</label>
             <input id="auth-name" name="fullName" type="text" autoComplete="name" placeholder="Your name" maxLength={60} required />
-            <label htmlFor="auth-gender">GENDER</label>
-            <select id="auth-gender" name="gender" value={gender} onChange={(event) => {
-              const value = event.currentTarget.value;
-              setGender(value === "woman" || value === "man" ? value : "");
-            }} required>
-              <option value="" disabled>Select gender</option>
-              <option value="woman">Woman</option>
-              <option value="man">Man</option>
-            </select>
-            {gender && <fieldset className="signup-avatar-fieldset">
-              <legend>CHOOSE YOUR AVATAR</legend>
-              <p className="signup-avatar-group-title">{gender === "woman" ? "Woman" : "Man"}</p>
-              <div className="signup-avatar-options">
-                {signupAvatars[gender].map((avatar) => (
-                  <label className="signup-avatar-option" key={avatar.src}>
-                    <input
-                      className="signup-avatar-radio"
-                      type="radio"
-                      name="avatarUrl"
-                      value={avatar.src}
-                      required
-                    />
-                    <Image src={avatar.src} alt="" loading="lazy" decoding="async" width={128} height={128} sizes="(max-width: 560px) 22vw, 100px" />
-                    <span>{avatar.name}</span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>}
-            <noscript>
-              <label htmlFor="auth-avatar">CHOOSE YOUR AVATAR</label>
-              <select id="auth-avatar" name="avatarUrl" defaultValue="">
-                <option value="">Use the default avatar</option>
+            <span className="signup-gender-heading">GENDER</span>
+            <div className="signup-choice">
+              <input
+                className="signup-gender-radio signup-gender-radio-woman"
+                id="auth-gender-woman"
+                type="radio"
+                name="gender"
+                value="woman"
+                required
+              />
+              <label className="signup-gender-option" htmlFor="auth-gender-woman">Woman</label>
+              <input
+                className="signup-gender-radio signup-gender-radio-man"
+                id="auth-gender-man"
+                type="radio"
+                name="gender"
+                value="man"
+                required
+              />
+              <label className="signup-gender-option" htmlFor="auth-gender-man">Man</label>
+              <fieldset className="signup-avatar-fieldset">
+                <legend>CHOOSE YOUR AVATAR</legend>
                 {Object.entries(signupAvatars).map(([avatarGender, avatars]) => (
-                  <optgroup key={avatarGender} label={avatarGender === "woman" ? "Woman" : "Man"}>
-                    {avatars.map((avatar) => (
-                      <option key={avatar.src} value={avatar.src}>{avatar.name}</option>
-                    ))}
-                  </optgroup>
+                  <div
+                    className={`signup-avatar-group signup-avatar-group-${avatarGender}`}
+                    key={avatarGender}
+                  >
+                    <p className="signup-avatar-group-title">{avatarGender === "woman" ? "Woman" : "Man"}</p>
+                    <div className="signup-avatar-options">
+                      {avatars.map((avatar) => (
+                        <label className="signup-avatar-option" key={avatar.src}>
+                          <input
+                            className="signup-avatar-radio"
+                            type="radio"
+                            name="avatarUrl"
+                            value={avatar.src}
+                            required
+                          />
+                          <Image src={avatar.src} alt="" loading="lazy" decoding="async" width={128} height={128} sizes="(max-width: 560px) 22vw, 100px" />
+                          <span>{avatar.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
                 ))}
-              </select>
-            </noscript>
+              </fieldset>
+            </div>
             <label htmlFor="auth-age-range">AGE</label>
             <select id="auth-age-range" name="ageRange" defaultValue="" required>
               <option value="" disabled>Select age range</option>
