@@ -421,11 +421,15 @@ h1,h2,h3,p{margin-top:0}.hero-intro h1{font:800 clamp(36px,4.4vw,58px)/1.13 Manr
 .login-form input::placeholder{color:#71839c}
 .login-form input:focus,.login-form select:focus{border-color:rgba(92,242,226,.75);box-shadow:0 0 0 3px rgba(92,242,226,.08);outline:0}
 .signup-avatar-fieldset{min-width:0;margin:3px 0 5px;padding:0;border:0}
-.signup-avatar-fieldset legend{margin-bottom:9px}
+.signup-avatar-fieldset legend{margin-bottom:6px}
+.signup-avatar-hint,.signup-avatar-group-title{margin:0 0 8px;color:#aebed2;font-size:10px;line-height:1.5}
+.signup-avatar-group{margin-top:11px}
+.signup-avatar-group-title{font-weight:700}
 .signup-avatar-options{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}
 .signup-avatar-option{min-width:0;display:grid;justify-items:center;gap:6px;padding:7px 5px;border:1px solid rgba(143,172,201,.25);border-radius:11px;background:rgba(5,13,26,.48);color:#aebed2;font-size:10px;font-weight:700;cursor:pointer;transition:border-color .2s,background .2s,transform .2s}
 .signup-avatar-option:hover{transform:translateY(-2px);border-color:rgba(92,242,226,.55);color:#effaff}
-.signup-avatar-option.selected{border-color:var(--cyan);background:linear-gradient(145deg,rgba(38,166,171,.19),rgba(111,75,161,.18));color:#efffff;box-shadow:0 0 15px rgba(92,242,226,.12)}
+.signup-avatar-option:has(.signup-avatar-radio:checked){border-color:var(--cyan);background:linear-gradient(145deg,rgba(38,166,171,.19),rgba(111,75,161,.18));color:#efffff;box-shadow:0 0 15px rgba(92,242,226,.12)}
+.login-form .signup-avatar-radio{width:18px;height:18px;margin:0;padding:0;accent-color:var(--cyan);background:transparent;border:0;box-shadow:none;appearance:auto}
 .signup-avatar-option img{display:block;width:100%;aspect-ratio:1;object-fit:cover;border-radius:50%;background:#101b2e}
 .login-form .save-username{position:relative;display:flex;align-items:center;gap:9px;width:max-content;margin:2px 0 3px;color:#aab9cd;font-size:11px;font-weight:500;letter-spacing:0;cursor:pointer}
 .save-username input{position:absolute;width:1px;height:1px;opacity:0}

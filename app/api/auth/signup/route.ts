@@ -99,7 +99,6 @@ export async function POST(request: Request) {
 
   const gender = payload.gender === "woman" || payload.gender === "man" ? payload.gender : null;
   const ageRange = payload.ageRange;
-  const avatarUrl = payload.avatarUrl;
   if (
     typeof payload.email !== "string"
     || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email.trim())
@@ -112,10 +111,15 @@ export async function POST(request: Request) {
     || payload.fullName.trim().length > 60
     || !gender
     || (ageRange !== "<18" && ageRange !== "18-25" && ageRange !== ">25")
-    || typeof avatarUrl !== "string"
-    || !signupAvatars[gender].some((avatar) => avatar.src === avatarUrl)
   ) {
     return fail("invalid-signup", "Pastikan nama, email, password, gender, usia, dan avatar sudah diisi dengan benar.");
+  }
+
+  const avatarUrl = typeof payload.avatarUrl === "string" && payload.avatarUrl.length > 0
+    ? payload.avatarUrl
+    : signupAvatars[gender][0].src;
+  if (!signupAvatars[gender].some((avatar) => avatar.src === avatarUrl)) {
+    return fail("invalid-signup", "Pilih avatar yang sesuai dengan gender.");
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
