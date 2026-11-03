@@ -2,9 +2,14 @@
   "/_global-error/page": "/_global-error",
   "/_not-found/page": "/_not-found",
   "/admin/page": "/admin",
+  "/api/auth/login/route": "/api/auth/login",
+  "/api/auth/signup/route": "/api/auth/signup",
+  "/api/bonus-cover/route": "/api/bonus-cover",
+  "/api/lynk/webhook/route": "/api/lynk/webhook",
   "/auth/callback/route": "/auth/callback",
   "/dashboard/page": "/dashboard",
   "/login/page": "/login",
+  "/onboarding/access-code/page": "/onboarding/access-code",
   "/page": "/",
   "/signup/page": "/signup"
 }

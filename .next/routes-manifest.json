@@ -48,6 +48,30 @@
       "namedRegex": "^/admin(?:/)?$"
     },
     {
+      "page": "/api/auth/login",
+      "regex": "^/api/auth/login(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/auth/login(?:/)?$"
+    },
+    {
+      "page": "/api/auth/signup",
+      "regex": "^/api/auth/signup(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/auth/signup(?:/)?$"
+    },
+    {
+      "page": "/api/bonus-cover",
+      "regex": "^/api/bonus\\-cover(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/bonus\\-cover(?:/)?$"
+    },
+    {
+      "page": "/api/lynk/webhook",
+      "regex": "^/api/lynk/webhook(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/lynk/webhook(?:/)?$"
+    },
+    {
       "page": "/auth/callback",
       "regex": "^/auth/callback(?:/)?$",
       "routeKeys": {},
@@ -64,6 +88,12 @@
       "regex": "^/login(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/login(?:/)?$"
+    },
+    {
+      "page": "/onboarding/access-code",
+      "regex": "^/onboarding/access\\-code(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/onboarding/access\\-code(?:/)?$"
     },
     {
       "page": "/signup",

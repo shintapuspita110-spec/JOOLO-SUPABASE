@@ -21,6 +21,7 @@
           "originalSource": "/auth/callback"
         }
       ]
-    }
+    },
+    "/api/lynk/webhook": {}
   }
 }
