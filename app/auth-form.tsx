@@ -5,24 +5,10 @@ import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getAuthErrorMessage } from "@/lib/auth-messages";
+import { signupAvatars } from "@/lib/signup-avatars";
 
 type AuthFormProps = { mode: "login" | "signup"; initialMessage?: string };
-type SignupGender = "woman" | "man";
-
-const signupAvatars: Record<SignupGender, Array<{ name: string; src: string }>> = {
-  woman: [
-    { name: "Luna", src: "/AVATAR/Woman/Luna.png" },
-    { name: "Rosie", src: "/AVATAR/Woman/Rosie.png" },
-    { name: "Stella", src: "/AVATAR/Woman/Stella.png" },
-    { name: "Aurora", src: "/AVATAR/Woman/Aurora.png" },
-  ],
-  man: [
-    { name: "Ray", src: "/AVATAR/Man/Ray.png" },
-    { name: "Atlas", src: "/AVATAR/Man/Atlas.png" },
-    { name: "Finn", src: "/AVATAR/Man/Finn.png" },
-    { name: "Cosmo", src: "/AVATAR/Man/Cosmo.png" },
-  ],
-};
+type SignupGender = keyof typeof signupAvatars;
 
 export default function AuthForm({ mode, initialMessage = "" }: AuthFormProps) {
   const isSignup = mode === "signup";
@@ -76,35 +62,52 @@ export default function AuthForm({ mode, initialMessage = "" }: AuthFormProps) {
 
     setBusy(true);
     try {
-      const supabase = createClient();
       if (isSignup) {
         const fullName = String(form.get("fullName") ?? "").trim();
         const genderValue = String(form.get("gender") ?? "");
         const selectedGender = genderValue === "woman" || genderValue === "man" ? genderValue : null;
         const ageRange = String(form.get("ageRange") ?? "");
+        const selectedAvatarUrl = String(form.get("avatarUrl") ?? "");
         if (
           !selectedGender
           || !["<18", "18-25", ">25"].includes(ageRange)
-          || !signupAvatars[selectedGender].some((avatar) => avatar.src === avatarUrl)
+          || !signupAvatars[selectedGender].some((avatar) => avatar.src === selectedAvatarUrl)
         ) {
           setMessage("Please select a gender, avatar, and age range.");
           return;
         }
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: { full_name: fullName, gender: selectedGender, age_range: ageRange, avatar_url: avatarUrl },
-            emailRedirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
-          },
+        const response = await fetch("/api/auth/signup", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email,
+            password,
+            fullName,
+            gender: selectedGender,
+            ageRange,
+            avatarUrl: selectedAvatarUrl,
+          }),
+          cache: "no-store",
         });
-
-        if (error) {
-          setMessage(error.message);
-        } else if (data.session) {
-          window.location.replace("/dashboard");
-        } else {
+        const result: unknown = await response.json();
+        if (
+          typeof result !== "object"
+          || result === null
+          || !("created" in result)
+          || result.created !== true
+        ) {
+          const errorMessage = typeof result === "object" && result !== null && "error" in result
+            && typeof result.error === "string"
+            ? result.error
+            : "Pendaftaran belum berhasil. Silakan periksa data dan coba lagi.";
+          setMessage(errorMessage);
+        } else if (!response.ok) {
+          setMessage("Pendaftaran belum berhasil. Silakan periksa data dan coba lagi.");
+        } else if ("requiresEmailConfirmation" in result && result.requiresEmailConfirmation === true) {
           setMessage("Akun berhasil dibuat. Periksa email untuk konfirmasi sebelum login.");
+        } else {
+          window.location.assign("/onboarding/access-code");
         }
       } else {
         const response = await fetch("/api/auth/login", {
@@ -157,7 +160,7 @@ export default function AuthForm({ mode, initialMessage = "" }: AuthFormProps) {
         <form
           className="login-form"
           method="post"
-          action={isSignup ? "/signup" : "/api/auth/login"}
+          action={isSignup ? "/api/auth/signup" : "/api/auth/login"}
           onSubmit={submit}
         >
           {isSignup && <>
@@ -173,6 +176,20 @@ export default function AuthForm({ mode, initialMessage = "" }: AuthFormProps) {
               <option value="woman">Woman</option>
               <option value="man">Man</option>
             </select>
+            <input type="hidden" name="avatarUrl" value={avatarUrl} disabled={!avatarUrl} />
+            <noscript>
+              <label htmlFor="auth-avatar">CHOOSE YOUR AVATAR</label>
+              <select id="auth-avatar" name="avatarUrl" defaultValue="" required>
+                <option value="" disabled>Select avatar</option>
+                {Object.entries(signupAvatars).map(([avatarGender, avatars]) => (
+                  <optgroup key={avatarGender} label={avatarGender === "woman" ? "Woman" : "Man"}>
+                    {avatars.map((avatar) => (
+                      <option key={avatar.src} value={avatar.src}>{avatar.name}</option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </noscript>
             {gender && <fieldset className="signup-avatar-fieldset">
               <legend>CHOOSE YOUR AVATAR</legend>
               <div className="signup-avatar-options">
