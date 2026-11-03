@@ -5,7 +5,13 @@ import type { UploadedBonusResource } from "@/lib/bonus";
 import type { PhaseDailyQuest, PhaseQuestProgress } from "@/lib/phase-quests";
 import type { UserDailyQuest } from "@/lib/user-daily-quests";
 
-export default async function DashboardPage() {
+type DashboardPageProps = {
+  searchParams: Promise<{ view?: string | string[] }>;
+};
+
+export default async function DashboardPage({ searchParams }: DashboardPageProps) {
+  const { view } = await searchParams;
+  const initialView = view === "bonus" || view === "profile" || view === "leaderboard" ? view : "challenge";
   const supabase = await createClient();
   const { data: { user }, error: userError } = await supabase.auth.getUser();
 
@@ -124,6 +130,7 @@ export default async function DashboardPage() {
       phaseDailyQuests={(phaseDailyQuests ?? []) as PhaseDailyQuest[]}
       phaseQuestProgress={(phaseQuestProgress ?? []) as PhaseQuestProgress[]}
       userDailyQuests={(userDailyQuests ?? []) as UserDailyQuest[]}
+      initialView={initialView}
     />
   );
 }

@@ -886,6 +886,7 @@ export default function DashboardClient({
   phaseDailyQuests,
   phaseQuestProgress: initialPhaseQuestProgress,
   userDailyQuests: initialUserDailyQuests,
+  initialView,
 }: {
   userId: string;
   email: string;
@@ -899,6 +900,7 @@ export default function DashboardClient({
   phaseDailyQuests: PhaseDailyQuest[];
   phaseQuestProgress: PhaseQuestProgress[];
   userDailyQuests: UserDailyQuest[];
+  initialView: "challenge" | "bonus" | "profile" | "leaderboard";
 }) {
   const router = useRouter();
   const [gender, setGender] = useState<Gender>("woman");
@@ -955,9 +957,9 @@ export default function DashboardClient({
   const [certificateConfirmationOpen, setCertificateConfirmationOpen] = useState(false);
   const [certificatePreviewUrl, setCertificatePreviewUrl] = useState<string | null>(null);
   const [certificatePreviewRows, setCertificatePreviewRows] = useState<CertificateAssessmentRow[]>([]);
-  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
-  const [bonusOpen, setBonusOpen] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
+  const [leaderboardOpen, setLeaderboardOpen] = useState(initialView === "leaderboard");
+  const [bonusOpen, setBonusOpen] = useState(initialView === "bonus");
+  const [profileOpen, setProfileOpen] = useState(initialView === "profile");
   const [appGuideOpen, setAppGuideOpen] = useState(false);
   const [profileDialog, setProfileDialog] = useState<ProfileDialog>(null);
   const [resetSaving, setResetSaving] = useState(false);
@@ -2545,13 +2547,13 @@ export default function DashboardClient({
       <header className="topbar shell">
         <a href="#top" className="brand" aria-label={t("JOOLO home")}><Image className="brand-logo" src="/joolo-logo.png" width={566} height={161} alt="" /></a>
         <nav className="main-nav" aria-label={t("Main navigation")}>
-          <button className="nav-link" onClick={() => setLeaderboardOpen(true)}>{t("Leaderboard")}</button>
+          <a className="nav-link" href="/dashboard?view=leaderboard">{t("Leaderboard")}</a>
           <a className={`nav-link ${bonusOpen ? "" : "active"}`} href="#calendar" onClick={() => setBonusOpen(false)}>{t("Challenge")}</a>
-          <button className={`nav-link ${bonusOpen ? "active bonus-nav-active" : ""}`} onClick={() => { setBonusOpen(true); setBonusSearch(""); setBonusSearchOpen(false); }}>{t("Bonus")}</button>
+          <a className={`nav-link ${bonusOpen ? "active bonus-nav-active" : ""}`} href="/dashboard?view=bonus">{t("Bonus")}</a>
         </nav>
         <div className="header-actions">
           {languageSelector}
-          <button className="icon-button" onClick={openProfile} aria-label={t("Profile")}><Icon name="user" size={21} /></button>
+          <a className="icon-button" href="/dashboard?view=profile" aria-label={t("Profile")}><Icon name="user" size={21} /></a>
           <a className="mobile-cta" href="#today">{t("Today")} <Icon name="arrow" size={16} /></a>
         </div>
       </header>
@@ -2851,7 +2853,7 @@ export default function DashboardClient({
         <div className="stars stars-one" /><div className="stars stars-two" />
         <main className="profile-content shell app-guide-content" aria-labelledby="app-guide-title">
           <header className="profile-heading">
-            <button className="profile-back" type="button" onClick={() => { setAppGuideOpen(false); setProfileOpen(true); }} aria-label={t("Back to profile")}><Icon name="back" size={23} /></button>
+            <a className="profile-back" href="/dashboard?view=profile" aria-label={t("Back to profile")}><Icon name="back" size={23} /></a>
             <h1 id="app-guide-title">{t("Your JOOLO Guide")}</h1>
             <span className="profile-heading-spacer" />
           </header>
@@ -2959,7 +2961,7 @@ export default function DashboardClient({
         <div className="stars stars-one" /><div className="stars stars-two" />
         <section className="profile-content shell" aria-labelledby="profile-title">
           <header className="profile-heading">
-            <button className="profile-back" onClick={() => setProfileOpen(false)} aria-label={t("Back to journey")}><Icon name="back" size={23} /></button>
+            <a className="profile-back" href="/dashboard" aria-label={t("Back to journey")}><Icon name="back" size={23} /></a>
             <h1 id="profile-title">{t("Profile")}</h1>
             <span className="profile-heading-spacer" />
           </header>
@@ -3105,13 +3107,13 @@ export default function DashboardClient({
       {bonusOpen && <div className="bonus-screen">
         <div className="stars stars-one" /><div className="stars stars-two" />
         <header className="topbar shell bonus-topbar">
-          <a href="#top" className="brand" onClick={(event) => { event.preventDefault(); setBonusOpen(false); }} aria-label={t("JOOLO home")}><Image className="brand-logo" src="/joolo-logo.png" width={566} height={161} alt="" /></a>
+          <a href="/dashboard" className="brand" aria-label={t("JOOLO home")}><Image className="brand-logo" src="/joolo-logo.png" width={566} height={161} alt="" /></a>
           <nav className="main-nav" aria-label={t("Main navigation")}>
-            <button className="nav-link" onClick={() => { setBonusOpen(false); setLeaderboardOpen(true); }}>{t("Leaderboard")}</button>
-            <button className="nav-link" onClick={() => { setBonusOpen(false); jumpToChallenges(); }}>{t("Challenge")}</button>
+            <a className="nav-link" href="/dashboard?view=leaderboard">{t("Leaderboard")}</a>
+            <a className="nav-link" href="/dashboard#today">{t("Challenge")}</a>
             <button className="nav-link active bonus-nav-active" aria-current="page">{t("Bonus")}</button>
           </nav>
-          <div className="header-actions">{languageSelector}<button className="icon-button" onClick={openProfile} aria-label={t("Profile")}><Icon name="user" size={21} /></button></div>
+          <div className="header-actions">{languageSelector}<a className="icon-button" href="/dashboard?view=profile" aria-label={t("Profile")}><Icon name="user" size={21} /></a></div>
         </header>
         <main className="bonus-content shell" aria-labelledby="bonus-title">
           <div className="bonus-title-row">
@@ -3144,20 +3146,20 @@ export default function DashboardClient({
             </article>)}
             {visibleUploadedResources.length === 0 && <div className="bonus-empty"><Icon name="search" size={23} /><strong>{t("No resources found in this orbit.")}</strong><span>{t("Try a different title or category.")}</span><button onClick={() => setBonusSearch("")}>{t("Clear search")}</button></div>}
           </section>
-          <footer className="bonus-footer"><span>✦ {t("Made for your becoming")}</span><button onClick={() => setBonusOpen(false)}>{t("Back to your journey ↑")}</button></footer>
+          <footer className="bonus-footer"><span>✦ {t("Made for your becoming")}</span><a href="/dashboard">{t("Back to your journey ↑")}</a></footer>
         </main>
       </div>}
 
       {leaderboardOpen && <div className="leaderboard-screen">
         <div className="stars stars-one" /><div className="stars stars-two" />
         <header className="topbar shell leaderboard-topbar">
-          <a href="#top" className="brand" onClick={(event) => { event.preventDefault(); setLeaderboardOpen(false); }} aria-label={t("JOOLO home")}><Image className="brand-logo" src="/joolo-logo.png" width={566} height={161} alt="" /></a>
+          <a href="/dashboard" className="brand" aria-label={t("JOOLO home")}><Image className="brand-logo" src="/joolo-logo.png" width={566} height={161} alt="" /></a>
           <nav className="main-nav" aria-label={t("Main navigation")}>
-            <button className="nav-link active leaderboard-nav-active" onClick={() => setLeaderboardOpen(false)}>{t("Leaderboard")}</button>
-            <button className="nav-link" onClick={() => { setLeaderboardOpen(false); jumpToChallenges(); }}>{t("Challenge")}</button>
-            <button className="nav-link" onClick={() => { setLeaderboardOpen(false); setBonusOpen(true); }}>{t("Bonus")}</button>
+            <a className="nav-link active leaderboard-nav-active" href="/dashboard">{t("Leaderboard")}</a>
+            <a className="nav-link" href="/dashboard#today">{t("Challenge")}</a>
+            <a className="nav-link" href="/dashboard?view=bonus">{t("Bonus")}</a>
           </nav>
-          <div className="header-actions">{languageSelector}<button className="icon-button" onClick={openProfile} aria-label={t("Profile")}><Icon name="user" size={21} /></button></div>
+          <div className="header-actions">{languageSelector}<a className="icon-button" href="/dashboard?view=profile" aria-label={t("Profile")}><Icon name="user" size={21} /></a></div>
         </header>
         <main className="leaderboard-content shell" aria-labelledby="leaderboard-title">
           <div className="leaderboard-heading"><span className="eyebrow"><span className="eyebrow-line" /> {t("THE COSMIC COMMUNITY")}</span><h1 id="leaderboard-title">{t("Find your ")}<span>{t("orbit.")}</span></h1><p>{t("Every small step deserves a few coins.")}</p></div>
