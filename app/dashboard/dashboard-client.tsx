@@ -3,7 +3,6 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { PDFArray, PDFDict, PDFDocument, PDFName, PDFRawStream, StandardFonts, decodePDFRawStream, rgb } from "pdf-lib";
 import { createClient } from "@/lib/supabase/client";
 import type { BonusType, UploadedBonusResource } from "@/lib/bonus";
 import type { PhaseDailyQuest, PhaseQuestProgress } from "@/lib/phase-quests";
@@ -856,13 +855,37 @@ function Icon({ name, size = 20 }: { name: string; size?: number }) {
   return <svg {...common} aria-hidden="true">{paths[name] ?? paths.sparkles}</svg>;
 }
 
-function readStored<T>(key: string, fallback: T, userId: string): T {
+function readStored<T>(
+  key: string,
+  fallback: T,
+  userId: string,
+  isValid: (value: unknown) => value is T,
+): T {
   try {
     const value = localStorage.getItem(`${userId}:${key}`);
-    return value ? (JSON.parse(value) as T) : fallback;
+    if (!value) return fallback;
+    const parsed: unknown = JSON.parse(value);
+    return isValid(parsed) ? parsed : fallback;
   } catch {
     return fallback;
   }
+}
+
+function isStoredChallenge(value: unknown): value is Challenge {
+  if (!isRecord(value)) return false;
+  return typeof value.id === "string"
+    && typeof value.title === "string"
+    && typeof value.subtitle === "string"
+    && typeof value.detail === "string"
+    && typeof value.reward === "number"
+    && Number.isFinite(value.reward)
+    && (value.accent === "cyan" || value.accent === "pink" || value.accent === "gold")
+    && typeof value.image === "string"
+    && typeof value.done === "boolean";
+}
+
+function isNumberRecord(value: unknown): value is Record<string, number> {
+  return isRecord(value) && Object.values(value).every((item) => typeof item === "number" && Number.isFinite(item));
 }
 
 function writeStored<T>(key: string, value: T, userId: string) {
@@ -995,15 +1018,25 @@ export default function DashboardClient({
   );
 
   useEffect(() => {
-    setGender(readStored<Gender>("joolo-gender", "woman", userId));
-    setChallenges(readStored<Challenge[]>("joolo-challenges", initialChallenges, userId));
+    setGender(readStored<Gender>("joolo-gender", "woman", userId, (value): value is Gender => value === "woman" || value === "man"));
+    setChallenges(readStored<Challenge[]>(
+      "joolo-challenges",
+      initialChallenges,
+      userId,
+      (value): value is Challenge[] => Array.isArray(value) && value.every(isStoredChallenge),
+    ));
     setJourneyStartDate(initialStartDate);
     setCoins(initialCoins);
-    setDailyStardustByDay(readStored<Record<string, number>>("joolo-daily-stardust", {}, userId));
-    setChallengeCompletionDays(readStored<Record<string, number>>("joolo-challenge-completion-days", {}, userId));
-    setProfileName(readStored<string>("joolo-profile-name", name, userId));
-    setProfileTheme(readStored<ProfileTheme>("joolo-profile-theme", "dark", userId));
-    setLanguage(readStored<Language>("joolo-language", "en", userId));
+    setDailyStardustByDay(readStored<Record<string, number>>("joolo-daily-stardust", {}, userId, isNumberRecord));
+    setChallengeCompletionDays(readStored<Record<string, number>>("joolo-challenge-completion-days", {}, userId, isNumberRecord));
+    setProfileName(readStored<string>("joolo-profile-name", name, userId, (value): value is string => typeof value === "string"));
+    setProfileTheme(readStored<ProfileTheme>(
+      "joolo-profile-theme",
+      "dark",
+      userId,
+      (value): value is ProfileTheme => value === "dark" || value === "light",
+    ));
+    setLanguage(readStored<Language>("joolo-language", "en", userId, (value): value is Language => value === "en" || value === "id"));
     setSelectedDay((previousDay) => previousDay === 1 ? getCurrentChallengeDay(initialStartDate) : previousDay);
     setHydrated(true);
   }, [userId, name, initialStartDate, initialCoins]);
@@ -1338,6 +1371,16 @@ export default function DashboardClient({
     preview = false,
     certificateName = profileName.trim() || email || "JOOLO member",
   ) {
+      const {
+        PDFArray,
+        PDFDict,
+        PDFDocument,
+        PDFName,
+        PDFRawStream,
+        StandardFonts,
+        decodePDFRawStream,
+        rgb,
+      } = await import("pdf-lib");
       const templateResponse = await fetch("/certificates/joolo-40-day-template-clean.pdf?v=7");
       if (!templateResponse.ok) {
         throw new Error(`Could not load certificate design: HTTP ${templateResponse.status}`);
